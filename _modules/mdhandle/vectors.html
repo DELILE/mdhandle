@@ -1,0 +1,340 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.vectors &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.vectors</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Provide utility functions for manipulating vector collections.</span>
+<span class="sd">In this context, vector collections are Nx3 :class:`numpy.ndarray` where N is the total number of atoms.  </span>
+
+<span class="sd">Each row in the vector collection is a vector associated with the individual atom.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+
+<span class="c">#------------------------------------------------------------------------------</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+
+<span class="c">#------------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="grow"><a class="viewcode-back" href="../../reference.html#mdhandle.vectors.grow">[docs]</a><span class="k">def</span> <span class="nf">grow</span><span class="p">(</span><span class="n">cont_vecs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns a vector collection grown from input list/tuple, or comma separated</span>
+<span class="sd">    list of existing vector collections.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    cont_vecs : iterable of :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">        List or tuple of vector collections (:class:`numpy.ndarray`, (Nx3)) to </span>
+<span class="sd">        be stacked.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    grown : :class:`numpy.ndarray` ((N1 + N2 + ...)x3 )</span>
+<span class="sd">        Returns new vector collection (numpy.ndarray).</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    ---------</span>
+<span class="sd">    &gt;&gt;&gt; a = np.array([[   2.25313,   22.4553 ,   11.1074 ],</span>
+<span class="sd">                      [ 149.999  ,    4.65435,   21.8793 ]])</span>
+<span class="sd">    &gt;&gt;&gt; b = np.array([ 153.184  ,    7.48026,  143.027  ])</span>
+
+<span class="sd">    &gt;&gt;&gt; grow((a,b))</span>
+<span class="sd">    array([[   2.25313,   22.4553 ,   11.1074 ],</span>
+<span class="sd">           [ 149.999  ,    4.65435,   21.8793 ],</span>
+<span class="sd">           [ 153.184  ,    7.48026,  143.027  ]])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">cont_vecs</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">i</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">i</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">3</span><span class="p">,)</span>
+        <span class="k">elif</span> <span class="n">i</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">i</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">3</span>
+    <span class="n">grown</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">cont_vecs</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">grown</span>
+
+</div>
+<div class="viewcode-block" id="build_from_scalars"><a class="viewcode-back" href="../../reference.html#mdhandle.vectors.build_from_scalars">[docs]</a><span class="k">def</span> <span class="nf">build_from_scalars</span><span class="p">(</span><span class="n">cont_vecs</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns a vector collection (:class:`numpy.ndarray`, (Nx3)) from its scalar</span>
+<span class="sd">    components (:class:`numpy.ndarray`, (Nx1)).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cont_vecs : iterable of :class:`numpy.ndarray`, (Nx1)</span>
+<span class="sd">        Collection of constituent scalars: ``(v0, v1, v2)``.</span>
+<span class="sd">        Each scalar contains atomwise scalar value.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    vec_coll : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">        Returns vector collection in the form</span>
+<span class="sd">        ``numpy.array([v_x, v_y, v_z])``.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    ---------</span>
+<span class="sd">    &gt;&gt;&gt; v0 = np.array([   2.25313,  149.999  ,   34.7775 ,  153.184  ])</span>
+<span class="sd">    &gt;&gt;&gt; v1 = np.array([ 22.4553 ,   4.65435,  59.7746 ,   7.48026])</span>
+<span class="sd">    &gt;&gt;&gt; v2 = np.array([  11.1074,   21.8793,   82.1284,  143.027 ])</span>
+<span class="sd">    &gt;&gt;&gt; build_from_scalars((v0, v1, v2))</span>
+<span class="sd">    array([[   2.25313,   22.4553 ,   11.1074 ],</span>
+<span class="sd">           [ 149.999  ,    4.65435,   21.8793 ],</span>
+<span class="sd">           [  34.7775 ,   59.7746 ,   82.1284 ],</span>
+<span class="sd">           [  153.184 ,   7.48026  ,  143.027 ]])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c"># Will raise exception if cannot be unpacked</span>
+    <span class="p">(</span><span class="n">v0</span><span class="p">,</span> <span class="n">v1</span><span class="p">,</span> <span class="n">v2</span><span class="p">)</span> <span class="o">=</span> <span class="n">cont_vecs</span>
+
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v0</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v1</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+    <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">v2</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+
+    <span class="c"># ASSERT: All scalar components are the same length</span>
+    <span class="k">assert</span> <span class="n">v0</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">v1</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">assert</span> <span class="n">v0</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">v2</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">assert</span> <span class="n">v1</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">v2</span><span class="o">.</span><span class="n">shape</span>
+
+    <span class="n">vec_coll</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span><span class="n">cont_vecs</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">vec_coll</span>
+
+</div>
+<div class="viewcode-block" id="magnitude"><a class="viewcode-back" href="../../reference.html#mdhandle.vectors.magnitude">[docs]</a><span class="k">def</span> <span class="nf">magnitude</span><span class="p">(</span><span class="n">vec</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns magnitude of each row within a vector collection.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    vec : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">        Stack of vectors, a vector collection.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    mags : :class:`numpy.ndarray`, (Nx1)</span>
+<span class="sd">        Magnitude of each row vector within the vector collection.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; vec = np.array([[ 1 , 2 , 4],</span>
+<span class="sd">                        [ 2 , 3 , 6],</span>
+<span class="sd">                      ])</span>
+<span class="sd">    &gt;&gt;&gt; magnitude(vec)</span>
+<span class="sd">    array([4.5825, 7. ])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">vec</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">mags</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">vec</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">mags</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="n">sq_magnitude</span><span class="p">(</span><span class="n">vec</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">mags</span>
+
+</div>
+<div class="viewcode-block" id="sq_magnitude"><a class="viewcode-back" href="../../reference.html#mdhandle.vectors.sq_magnitude">[docs]</a><span class="k">def</span> <span class="nf">sq_magnitude</span><span class="p">(</span><span class="n">vec</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns the square magnitude of each row within a vector collection.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    vec : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">        Stack of vectors, a vector collection.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    sq_mag : :class:`numpy.ndarray` (Nx1)</span>
+<span class="sd">       Square magnitude of each row vector within the vector collection.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; vec = np.array([[ 1 , 2 , 4],</span>
+<span class="sd">                        [ 2 , 3 , 6],</span>
+<span class="sd">                      ])</span>
+<span class="sd">    &gt;&gt;&gt; sq_magnitude(vec)</span>
+<span class="sd">    array([ 21.,  49.])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">vec</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">sq_mag</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">power</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">vec</span><span class="p">),</span> <span class="mi">2</span><span class="p">)</span>
+    <span class="k">elif</span> <span class="n">vec</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">sq_mag</span> <span class="o">=</span> <span class="p">(</span><span class="n">vec</span><span class="o">*</span><span class="n">vec</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">sq_mag</span>
+
+</div>
+<div class="viewcode-block" id="unit_vec"><a class="viewcode-back" href="../../reference.html#mdhandle.vectors.unit_vec">[docs]</a><span class="k">def</span> <span class="nf">unit_vec</span><span class="p">(</span><span class="n">vec</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns collection of unit vectors derived from input vector collection.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    vec : :class:`numpy.ndarray` (Nx3)</span>
+<span class="sd">        Stack of vectors, a vector collection.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    unit_v : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">        Collection of unit vectors.</span>
+
+<span class="sd">    Examples</span>
+<span class="sd">    --------</span>
+<span class="sd">    &gt;&gt;&gt; vec = array([[ 1 , 2 , 4],</span>
+<span class="sd">                     [ 2 , 3 , 6],</span>
+<span class="sd">                   ])</span>
+<span class="sd">    &gt;&gt;&gt; unit_vec(vec)</span>
+<span class="sd">    array([[ 0.218..., 0.436..., 0.872...],</span>
+<span class="sd">           [ 0.286..., 0.428..., 0.857...],</span>
+<span class="sd">         ])</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">mag</span> <span class="o">=</span> <span class="n">magnitude</span><span class="p">(</span><span class="n">vec</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">vec</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="n">unit_v</span> <span class="o">=</span> <span class="n">vec</span> <span class="o">/</span> <span class="n">mag</span>
+    <span class="k">elif</span> <span class="n">vec</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="n">unit_v</span> <span class="o">=</span> <span class="n">vec</span> <span class="o">/</span> <span class="n">build_from_scalars</span><span class="p">((</span><span class="n">mag</span><span class="p">,</span> <span class="n">mag</span><span class="p">,</span> <span class="n">mag</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">unit_v</span>
+
+</div>
+<div class="viewcode-block" id="vector_type_conv"><a class="viewcode-back" href="../../reference.html#mdhandle.vectors.vector_type_conv">[docs]</a><span class="k">def</span> <span class="nf">vector_type_conv</span><span class="p">(</span><span class="n">vec</span><span class="p">,</span> <span class="n">new_dtype</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Converts vector collection into required data format.</span>
+<span class="sd">    Currently converts only to: ``float``, ``int``</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    vec : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">        Vector collection.</span>
+<span class="sd">    new_dtype : string, {&#39;int&#39; | &#39;float&#39; }</span>
+<span class="sd">        Desired type of data.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    vec : :class:`numpy.ndarray` (Nx3)</span>
+<span class="sd">        ``vec`` with modified dtype.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">new_dtype</span> <span class="o">=</span> <span class="n">new_dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+    <span class="c"># TODO: Move list of acceptable dtypes to settings.  System dependent.</span>
+    <span class="k">if</span> <span class="n">new_dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;int&#39;</span><span class="p">,</span>   <span class="s">&#39;float&#39;</span><span class="p">,</span>
+                         <span class="s">&#39;int64&#39;</span><span class="p">,</span> <span class="s">&#39;float64&#39;</span><span class="p">,</span>
+                         <span class="s">&#39;int32&#39;</span><span class="p">,</span> <span class="s">&#39;float32&#39;</span><span class="p">]:</span>
+        <span class="k">raise</span> <span class="ne">UserWarning</span><span class="p">(</span><span class="s">&quot;Desired data type not supported.  </span><span class="se">\</span>
+<span class="s">                                                    Must be &#39;int&#39;, &#39;float&#39;.&quot;</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">vec</span><span class="o">.</span><span class="n">dtype</span> <span class="o">!=</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="n">new_dtype</span><span class="p">):</span>
+        <span class="n">vec</span> <span class="o">=</span> <span class="n">vec</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">new_dtype</span><span class="p">)</span>
+    <span class="c"># If dtype is already ok - do nothing and return original vec</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="k">pass</span>
+
+    <span class="k">return</span> <span class="n">vec</span>
+
+<span class="c"># =============================================================================</span>
+
+</div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,360 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.properties.cell_decomposition &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="up" title="mdhandle.properties" href="../properties.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../properties.html" accesskey="U">mdhandle.properties</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.properties.cell_decomposition</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Binning is a usefull technique for efficiently calculating all</span>
+<span class="sd">distances between a set of coordinates, when you are only interested in</span>
+<span class="sd">the distances below a given cutoff. The algorithm consists of two major</span>
+<span class="sd">steps:</span>
+
+<span class="sd">1. Divide the given set of coordinates into bins on a regular grid in space.</span>
+<span class="sd">2. Calculate the distances (or other usefull things) between coordinates</span>
+<span class="sd">   in neighbouring bins.</span>
+
+<span class="sd">**Credits**: Inspiration for binning algorithm from binning module from ``mol_mod`` module in ``MD-Tracks`` package</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="c">#TODO: Handle case where atoms are outside the primary simulation cell.</span>
+<span class="c">#           - max and min bins are reliant on sim_cell lengths not</span>
+<span class="c">#             maximum spread of atoms.</span>
+<span class="c">#           - Include optional wrap flag to control application of PBC.</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="SparseBinning"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.cell_decomposition.SparseBinning">[docs]</a><span class="k">class</span> <span class="nc">SparseBinning</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    3D space in the simulation domain is divided into a sparse grid with</span>
+<span class="sd">    atoms assigned into the appropriate bin using on a nearest-grid-point (NGP)</span>
+<span class="sd">    algorithm.</span>
+
+<span class="sd">    Each cell in the grid is called a bin.</span>
+<span class="sd">    </span>
+<span class="sd">    Each bin contains a set of atoms ids, or ``None`` if no atoms are present.</span>
+<span class="sd">    </span>
+<span class="sd">    All bins are uniquely defined by their indices ``(i,j,k)``.  </span>
+
+<span class="sd">    This implementation works with sparse bins as a bin is only created</span>
+<span class="sd">    as required.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Snap object to be sorted into cells.</span>
+<span class="sd">    grid_spacing : :class:`numpy.ndhandle`</span>
+<span class="sd">        Grid spacing along each coordinate direction.</span>
+<span class="sd">        Grid spacing must be an even divisor of the primary simulation</span>
+<span class="sd">        cell dimensions.</span>
+<span class="sd">        ``[default=np.ones(3,dtype=np.float)]``</span>
+<span class="sd">    use_selection : boolean    [default=False]</span>
+<span class="sd">        If ``True``, selections are applied to snap object when getting atom</span>
+<span class="sd">        coordinates.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">         Snap object.  Active dataset must be of type ``&#39;atoms&#39;``.</span>
+<span class="sd">    grid_spacing : :class:`numpy.ndarray` (3x1)</span>
+<span class="sd">        Grid spacing along coordinate directions:  ``[dx, dy, dz]``.</span>
+<span class="sd">        Must be even divisor of the simulation domain in each direction.</span>
+<span class="sd">    xyz : :class:`numpy.ndarray` (Nx3)</span>
+<span class="sd">        Atomic positions.</span>
+<span class="sd">    bins : dict</span>
+<span class="sd">        Organized by tuples corresponding to cell location</span>
+<span class="sd">        (i.e. ``(1, 1, 1 )``).  Each dictionary entries contains atom ids</span>
+<span class="sd">        for atoms located in that grid cell.</span>
+<span class="sd">        This is the sparse element of implementation as dictionary entries</span>
+<span class="sd">        only created as needed.</span>
+<span class="sd">    max_bins_idx : :class:`numpy.ndarray` (3x1)</span>
+<span class="sd">        Largest grid cell index along each coordinate direction.</span>
+<span class="sd">    min_bins_idx : :class:`numpy.ndarray` (3x1)</span>
+<span class="sd">        Smallest grid cell index along each coordinate direction.</span>
+<span class="sd">    nbins : :class:`numpy.ndarray` (3x1)</span>
+<span class="sd">        Number of bins along each coordinate direction.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    ------</span>
+
+<span class="sd">    **Class Attributes**:</span>
+
+<span class="sd">    * ``full_compare_indices`` : :class:`numpy.ndarray`</span>
+<span class="sd">        Deltas required to move through all neighbouring cells.</span>
+<span class="sd">    * ``N3_compare_indices`` : :class:`numpy.ndarray`</span>
+<span class="sd">        Deltas required to move through neighbouring cells with the help</span>
+<span class="sd">        of Newton&#39;s Third law such that only half interactions are required</span>
+<span class="sd">        at each grid cell.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c"># -------------- Class variables  -----------------------------------------</span>
+
+    <span class="c"># Displacements to nearest neighbouring cells</span>
+    <span class="n">full_compare_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+            <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">),</span>
+            <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">,</span>  <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">,</span>  <span class="mi">1</span><span class="p">),</span>
+            <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">),</span>
+
+            <span class="p">(</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">),</span> <span class="p">(</span> <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">),</span>
+            <span class="p">(</span> <span class="mi">0</span><span class="p">,</span>  <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span> <span class="mi">0</span><span class="p">,</span>  <span class="mi">0</span><span class="p">,</span>  <span class="mi">0</span><span class="p">),</span> <span class="p">(</span> <span class="mi">0</span><span class="p">,</span>  <span class="mi">0</span><span class="p">,</span>  <span class="mi">1</span><span class="p">),</span>
+            <span class="p">(</span> <span class="mi">0</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span> <span class="mi">0</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">),</span> <span class="p">(</span> <span class="mi">0</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">),</span>
+
+            <span class="p">(</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">),</span> <span class="p">(</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">),</span>
+            <span class="p">(</span> <span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span> <span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">,</span>  <span class="mi">0</span><span class="p">),</span> <span class="p">(</span> <span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">,</span>  <span class="mi">1</span><span class="p">),</span>
+            <span class="p">(</span> <span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span> <span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span>  <span class="mi">0</span><span class="p">),</span> <span class="p">(</span> <span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">,</span>  <span class="mi">1</span><span class="p">),</span>
+            <span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+
+    <span class="n">N3_compare_indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span>
+            <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span>
+            <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+            <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span>
+            <span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">grid_spacing</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">),</span>
+                             <span class="n">use_selection</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span> <span class="o">=</span> <span class="n">snap</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span> <span class="o">=</span> <span class="n">grid_spacing</span>
+
+        <span class="k">if</span> <span class="n">snap</span><span class="o">.</span><span class="n">grid_type</span> <span class="o">!=</span> <span class="s">&#39;atoms&#39;</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&quot;Snap must be grid type &#39;atoms&#39;.&quot;</span><span class="p">)</span>
+
+        <span class="c"># Testing that grid divides evenly into provide sim cell.</span>
+        <span class="n">test_divisors</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">lengths</span><span class="p">,</span> <span class="n">grid_spacing</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">all</span><span class="p">(</span><span class="n">test_divisors</span> <span class="o">==</span> <span class="mi">0</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">False</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Grid spacing must be even divisor of sim cell&#39;</span><span class="p">)</span>
+
+        <span class="c"># Getting atom coordinates - apply selection (if use_selection == True)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xyz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">(</span> <span class="p">(</span><span class="s">&#39;x&#39;</span><span class="p">,</span> <span class="s">&#39;y&#39;</span><span class="p">,</span> <span class="s">&#39;z&#39;</span><span class="p">),</span>
+                                                <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="n">use_selection</span><span class="p">)</span>  <span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xyz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">wrap_to_central</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xyz</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">bins</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="c"># -1 from initial calculation as bins are zero-indexed</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">max_bins_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span>
+                    <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">origin</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">lengths</span><span class="p">)</span> <span class="o">/</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">min_bins_idx</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">origin</span> <span class="o">/</span>
+                                            <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nbins</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">lengths</span> <span class="o">/</span>
+                                            <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SparseBinning._ngp"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.cell_decomposition.SparseBinning._ngp">[docs]</a>    <span class="k">def</span> <span class="nf">_ngp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculate bin index for position ``r`` using  nearest-grid-point (NGP)</span>
+<span class="sd">        algorithm.  The grid point is located at the centre of the bin.</span>
+
+<span class="sd">        Atoms located exactly at the maximum edge of the simulation</span>
+<span class="sd">        domain are moved back into the largest bin to avoid off-by-one error.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        r : :class:`numpy.ndarray` (Nx3 or 1x3)</span>
+<span class="sd">            Atom position.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        indices : dict</span>
+<span class="sd">            Return :class:`numpy.ndarray` with same shape as input position</span>
+<span class="sd">            containing the bin index for each atom.</span>
+
+<span class="sd">        References</span>
+<span class="sd">        -----------</span>
+<span class="sd">        * Hockney &amp; Eastwood, Computer Simulation Using Particles, CRC Press,</span>
+<span class="sd">          1988.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">indices</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">r</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+
+        <span class="c"># For edge case where particle is EXACTLY at very MAXIMUM must</span>
+        <span class="c"># move into maximum .  Otherwise will create a bin that is out of range</span>
+        <span class="n">indices</span><span class="p">[</span> <span class="n">indices</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_bins_idx</span> <span class="o">+</span> <span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_bins_idx</span>
+        <span class="k">return</span> <span class="n">indices</span>
+</div>
+    <span class="k">def</span> <span class="nf">get_surrounding</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">r</span><span class="p">,</span> 
+                              <span class="n">deltas</span><span class="o">=</span><span class="n">full_compare_indices</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Iterate over all atoms in the surrounding bins as defined by</span>
+<span class="sd">        deltas parameter.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        r : :class:`numpy.ndarray` (3x1)</span>
+<span class="sd">            Atom position in ``(x,y,z)`` format.</span>
+<span class="sd">        deltas : :class:`numpy.ndarray`  [default=full_compare_indices]</span>
+<span class="sd">            Array of tuples with format ``(dx,dy,dz)`` giving integer deltas</span>
+<span class="sd">            to neighbouring cells. For example, ``(-1, -1, -1)`` looks in the </span>
+<span class="sd">            bin ``dx = -1``, ``dy = -1``, ``dz = -1`` bin from the bin</span>
+<span class="sd">            containing the position defined by ``r``.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        bin_total : list</span>
+<span class="sd">            List of ``atom_id`` for atoms in bins surrouding position ``r``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Wrapping to cental cell as per PBC</span>
+        <span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">wrap_to_central</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+
+        <span class="n">center</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ngp</span><span class="p">(</span><span class="n">r</span><span class="p">)</span>
+        <span class="n">bin_total</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="k">for</span> <span class="n">delta</span> <span class="ow">in</span> <span class="n">deltas</span><span class="p">:</span>
+            <span class="n">question</span> <span class="o">=</span> <span class="n">center</span> <span class="o">+</span> <span class="n">delta</span>
+
+            <span class="c"># Apply PBC (controlled by self.snap.sim_cell.pbc)</span>
+            <span class="n">question</span> <span class="o">=</span> <span class="n">question</span> <span class="o">+</span> \
+                                    <span class="p">(</span><span class="n">question</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_bins_idx</span><span class="p">)</span><span class="o">*</span>\
+                                    <span class="o">-</span><span class="mi">1</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">nbins</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">pbc</span> <span class="o">+</span>\
+               <span class="p">(</span><span class="n">question</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_bins_idx</span><span class="p">)</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">nbins</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">pbc</span>
+
+            <span class="c"># Skipping any bins that are outside min or max bins</span>
+            <span class="k">if</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">question</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">max_bins_idx</span><span class="p">)</span> <span class="ow">or</span>
+                                         <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">question</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">min_bins_idx</span><span class="p">)):</span>
+                <span class="k">continue</span>
+
+            <span class="n">question</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">question</span><span class="p">)</span>
+
+            <span class="n">bin0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bins</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">question</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">bin0</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">bin_total</span><span class="o">.</span><span class="n">extend</span><span class="p">(</span><span class="n">bin0</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="n">bin_total</span>
+
+<div class="viewcode-block" id="SparseBinning.run"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.cell_decomposition.SparseBinning.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Run cell decomposition for :attr:`SparseBinning.snap` object. </span>
+<span class="sd">        </span>
+<span class="sd">        Cell decomposition is stored in :attr:`SparseBinning.bins`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c"># Loop over atoms and assgn to self.bins</span>
+        <span class="n">atom_id</span> <span class="o">=</span> <span class="p">(</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">xyz</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+
+        <span class="k">for</span> <span class="n">idx</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_ngp</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xyz</span><span class="p">):</span>
+            <span class="n">idx</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+            <span class="nb">bin</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bins</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span>
+            <span class="k">if</span> <span class="nb">bin</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="nb">bin</span> <span class="o">=</span> <span class="nb">set</span><span class="p">()</span>
+                <span class="nb">bin</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">atom_id</span><span class="o">.</span><span class="n">next</span><span class="p">())</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">bins</span><span class="p">[</span><span class="n">idx</span><span class="p">]</span> <span class="o">=</span> <span class="nb">bin</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="nb">bin</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">atom_id</span><span class="o">.</span><span class="n">next</span><span class="p">())</span>
+
+<span class="c"># =============================================================================</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../properties.html" >mdhandle.properties</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,1305 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.writers.xdmf &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.writers.xdmf</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Manages XDMF files used to contain snapshot data from MD simulation including</span>
+<span class="sd">atomistic and gridded data..</span>
+
+<span class="sd">Produces required ``.xmf`` and HDF files for a single snapshot.</span>
+
+<span class="sd">Updates existing ``.xmf`` and HDF files for single snapshot</span>
+
+<span class="sd">Creates summary ``.xmf`` files for temporal collection of snapshots</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="c">#TODO: xml parser/writer to handle xmf action.</span>
+<span class="c">#TODO: Use XDMF library: Add parallel IO functionality from XDMF library</span>
+
+<span class="c">#TODO: Add function at module level to ouput a spatial summary file, which</span>
+<span class="c">#      brings together disparate spatial grids (as opposed to separate xmf</span>
+<span class="c">#      files for different timesteps).</span>
+<span class="c"># TODO: Add HDF function to move array from one data set to another</span>
+<span class="c"># TODO: change funciton/method names so more abstract (i.e. another writer</span>
+<span class="c">#       could be used)</span>
+<span class="c"># TODO: Wrapper around file opening to keep count of the number of open files.</span>
+<span class="c"># TODO: Migrate xmf scalar, vector and tensor to just wrap xmf_block_attribute</span>
+
+<span class="c">#----------------------------------------------------------------------------</span>
+
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">shutil</span>
+
+<span class="kn">import</span> <span class="nn">tables</span> <span class="kn">as</span> <span class="nn">pyT</span>
+
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">utilities</span> <span class="k">as</span> <span class="n">util</span>
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">vectors</span>
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">settings</span>
+<span class="kn">from</span> <span class="nn">mdhandle.properties.binned_properties</span> <span class="kn">import</span> <span class="n">IMPLEMENTED_GRIDS</span>
+
+<span class="c">#----------------------------------------------------------------------------</span>
+<span class="c">#   Module functions</span>
+<span class="c">#----------------------------------------------------------------------------</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+
+<span class="c">#----------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="xmf_write_temporal_summary"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.xmf_write_temporal_summary">[docs]</a><span class="k">def</span> <span class="nf">xmf_write_temporal_summary</span><span class="p">(</span><span class="n">sim_cont</span><span class="p">,</span> <span class="n">fn_out</span><span class="o">=</span><span class="s">&#39;TEMP-SUMMARY-DEFAULT.xmf&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates a summary xmf file from set of individual snapshot xmf files.</span>
+<span class="sd">    Assumes each snapshot xmf file contains a single uniform grid.</span>
+<span class="sd">    The file may be for raw simulation data or may be the result of</span>
+<span class="sd">    processing.</span>
+
+<span class="sd">    XML content within and including grid is copied into summary xmf file.</span>
+<span class="sd">    </span>
+<span class="sd">    .. note::</span>
+<span class="sd">       XMF temporal summary file must be in the same directoy as the </span>
+<span class="sd">       individual XMF files.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    sim_cont : :class:`mdhandle.simcontainer.SimContainer`</span>
+<span class="sd">    fn_out : string,  [default=SUMMARY-DEFAULT.xmf]</span>
+<span class="sd">        FileName for summary file.  Do not give absolute path.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    0</span>
+<span class="sd">        Successful execution.</span>
+<span class="sd">    -1</span>
+<span class="sd">        An error has occured and the XMF file may not have been generated</span>
+<span class="sd">        at all.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">sim_cont</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">IMPLEMENTED_GRIDS</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Grid type </span><span class="si">%s</span><span class="s"> unknown&#39;</span> <span class="o">%</span> <span class="n">sim_cont</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">])</span>
+
+    <span class="k">if</span> <span class="n">fn_out</span> <span class="o">==</span> <span class="s">&#39;TEMP-SUMMARY-DEFAULT.xmf&#39;</span><span class="p">:</span>
+        <span class="c"># Handling the grid_type - changes the resulting file name</span>
+        <span class="k">if</span> <span class="n">sim_cont</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;atoms&#39;</span><span class="p">:</span>
+            <span class="n">add_name</span> <span class="o">=</span> <span class="s">&#39;TEMPORAL-SUMMARY&#39;</span>
+        <span class="k">elif</span> <span class="n">sim_cont</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;3DRegular&#39;</span><span class="p">:</span>
+            <span class="n">add_name</span> <span class="o">=</span> <span class="n">sim_cont</span><span class="o">.</span><span class="n">active_dataset_name</span> <span class="o">+</span> <span class="s">&#39;_TEMPORAL-SUMMARY&#39;</span>
+
+        <span class="n">fn_out</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s%s</span><span class="s">.xmf&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">util</span><span class="o">.</span><span class="n">common_prefix</span><span class="p">(</span><span class="n">sim_cont</span><span class="o">.</span><span class="n">flist</span><span class="p">),</span> <span class="n">add_name</span><span class="p">)</span>
+
+    <span class="n">text</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;&lt;?xml version=&quot;1.0&quot; ?&gt;</span>
+<span class="s">&lt;!DOCTYPE Xdmf SYSTEM &quot;Xdmf.dtd&quot; []&gt;</span>
+<span class="s">&lt;Xdmf xmlns:xi=&quot;http://www.w3.org/2003/XInclude&quot; Version=&quot;2.1&quot;&gt;</span>
+<span class="s">    &lt;Domain&gt;</span>
+<span class="s">        &lt;Grid Name=&quot;XXX_TEMPGRIDNAME_XXX&quot; GridType=&quot;Collection&quot; CollectionType=&quot;Temporal&quot;&gt;</span>
+<span class="s">&quot;&quot;&quot;</span>
+    <span class="n">temporal_grid_name</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">-</span><span class="si">%s</span><span class="s">-</span><span class="si">%s</span><span class="s">-Temporal-Collection&#39;</span> <span class="o">%</span>\
+                            <span class="p">(</span><span class="n">sim_cont</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;sim_name&#39;</span><span class="p">],</span>
+                             <span class="n">sim_cont</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">],</span>
+                             <span class="n">sim_cont</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">)</span>
+
+    <span class="n">text</span> <span class="o">=</span> <span class="n">text</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_TEMPGRIDNAME_XXX&quot;</span><span class="p">,</span> <span class="n">temporal_grid_name</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">snap</span> <span class="ow">in</span> <span class="n">sim_cont</span><span class="o">.</span><span class="n">slist</span><span class="p">:</span>
+        <span class="n">xmf_fn</span> <span class="o">=</span> <span class="n">snap</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">xmf_snap_name</span><span class="p">()</span>
+        <span class="n">text</span> <span class="o">+=</span> <span class="s">&#39;           &lt;xi:include href=&quot;</span><span class="si">%s</span><span class="s">&quot; xpointer=&quot;xpointer(//Xdmf/Domain/Grid)&quot; /&gt;</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">xmf_fn</span><span class="p">)</span>
+
+    <span class="c"># Adding final text and writing to file</span>
+    <span class="n">text</span> <span class="o">+=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">    &lt;/Grid&gt;</span>
+<span class="s">&lt;/Domain&gt;</span>
+<span class="s">&lt;/Xdmf&gt;&quot;&quot;&quot;</span>
+
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">fn_out</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Overwriting existing XMF summary file: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">fn_out</span><span class="p">)</span>
+        <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">fn_out</span><span class="p">)</span>
+    
+    <span class="n">f_out</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">fn_out</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)</span>
+    <span class="n">f_out</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">text</span><span class="p">)</span>
+    <span class="n">f_out</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    <span class="k">return</span> <span class="mi">0</span>
+
+</div>
+<div class="viewcode-block" id="hdf_compact"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.hdf_compact">[docs]</a><span class="k">def</span> <span class="nf">hdf_compact</span><span class="p">(</span><span class="n">flist</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Performs ptrepack compaction on list of HDF files.  This procedure</span>
+<span class="sd">    needs to be done periodically after moving data around within the HDF</span>
+<span class="sd">    tree to prevent the file size from increasing.</span>
+
+<span class="sd">    flist : iterable</span>
+<span class="sd">        List of HDF files to be compacted.</span>
+<span class="sd">    verbose : boolean,  [default=False]</span>
+<span class="sd">        Flag for verbosity of user input and output.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    0</span>
+<span class="sd">        Successfully completed compaction.</span>
+<span class="sd">    -1</span>
+<span class="sd">        An error has occured.  Unable to compact some files.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># ASSERT flist is iterable</span>
+    <span class="k">assert</span> <span class="nb">hasattr</span><span class="p">(</span><span class="n">flist</span><span class="p">,</span> <span class="s">&#39;__iter__&#39;</span><span class="p">)</span>
+
+    <span class="n">error</span> <span class="o">=</span> <span class="bp">False</span>
+    <span class="n">error_files</span> <span class="o">=</span> <span class="p">[]</span>
+
+    <span class="c"># TODO: hard coded tmp directory for all files - change to setting.</span>
+    <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">flist</span><span class="p">:</span>
+        <span class="n">fn_tmp</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="s">&#39;/tmp&#39;</span><span class="p">,</span> <span class="n">fn</span><span class="o">+</span><span class="s">&#39;_tmp.h5&#39;</span><span class="p">)</span>
+        <span class="n">success</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s">&#39;ptrepack -o </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">fn</span><span class="p">,</span> <span class="n">fn_tmp</span><span class="p">))</span>
+        <span class="k">if</span> <span class="n">success</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">shutil</span><span class="o">.</span><span class="n">move</span><span class="p">(</span><span class="n">fn_tmp</span><span class="p">,</span> <span class="n">fn</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">error</span> <span class="o">=</span> <span class="bp">True</span>
+            <span class="n">error_files</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">fn_tmp</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">error</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">verbose</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Compaction Failed for: &#39;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">errorFile</span> <span class="ow">in</span> <span class="n">error_files</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;    </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">errorFile</span><span class="p">))</span>
+        <span class="k">return</span> <span class="o">-</span><span class="mi">1</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">completion_msg</span><span class="p">(</span><span class="s">&#39;Successfully compacted set of HDF files.&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="mi">0</span>
+
+</div>
+<div class="viewcode-block" id="valid_file"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.valid_file">[docs]</a><span class="k">def</span> <span class="nf">valid_file</span><span class="p">(</span><span class="n">fn</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Tests whether ``fn`` is a valid HDF file.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    fn : string</span>
+<span class="sd">        Pathname to snapshot file.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    is_valid : boolean</span>
+<span class="sd">        ``True`` if ``fn`` is a valid HDF file that can be read by the</span>
+<span class="sd">        Py-Tables package.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># Can add other conditions as needed through logical and</span>
+    <span class="n">is_valid</span> <span class="o">=</span> <span class="n">pyT</span><span class="o">.</span><span class="n">isHDF5File</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">is_valid</span>
+
+
+<span class="c">#-----------------------------------------------------------------------------</span>
+<span class="c"># Classes</span>
+<span class="c">#-------------------------------------------------------------------------------</span>
+
+</div>
+<div class="viewcode-block" id="XDMFWriter"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter">[docs]</a><span class="k">class</span> <span class="nc">XDMFWriter</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Creates and/or maintains existing HDF files for storing snapshot data.</span>
+
+<span class="sd">    Creates new ``.xmf`` files.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    snap :   :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Simulation snapshot.</span>
+<span class="sd">    verbose : boolean,  [default=False]</span>
+<span class="sd">        Flag for verbosity of user input and output.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">    logger : :class:`mdhandle.logger.Logger`</span>
+<span class="sd">        Logger and user I/O module.</span>
+<span class="sd">    f_hdf : ``HDF file``</span>
+<span class="sd">        HDF file handle opened by PyTables.</span>
+<span class="sd">    verbose : boolean</span>
+<span class="sd">        If ``True``, verbose user I/O.</span>
+<span class="sd">    _xmf : file</span>
+<span class="sd">        Handle for ``.xmf`` file.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span> <span class="o">=</span> <span class="n">snap</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+
+
+    <span class="c"># -------------------------------------------------------------------------</span>
+    <span class="c">#   XMF Methods.</span>
+    <span class="c"># -------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="XDMFWriter.xmf_snap_name"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_snap_name">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_snap_name</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Generates name of XMF file for :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        object.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        xmf_name : string</span>
+<span class="sd">            Properly formatted ``.xmf`` file name for single snap shot</span>
+<span class="sd">            based on snap file name and dataset name.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">IMPLEMENTED_GRIDS</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Grid type </span><span class="si">%s</span><span class="s"> unknown&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;atoms&#39;</span><span class="p">:</span>
+            <span class="n">xmf_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">filename</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">+</span><span class="s">&#39;.xmf&#39;</span>
+
+        <span class="c"># TODO: Recast in terms fo snap attributes (e.g. sim_name, etc.)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;3DRegular&#39;</span><span class="p">:</span>
+            <span class="c"># TODO: HARDCODED - Assume format &#39;dump_simname_1234.h5&#39;</span>
+            <span class="n">splits</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">split</span><span class="p">(</span><span class="s">&#39;_&#39;</span><span class="p">)</span>
+            <span class="n">leader</span> <span class="o">=</span> <span class="s">&#39;_&#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">splits</span><span class="p">[:</span><span class="o">-</span><span class="mi">1</span><span class="p">])</span>
+            <span class="n">xmf_name</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">_</span><span class="si">%s</span><span class="s">_</span><span class="si">%s</span><span class="s">.xmf&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">leader</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">,</span>
+                                                 <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;time&#39;</span><span class="p">])</span>
+            <span class="n">xmf_name</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">directory</span><span class="p">,</span> <span class="n">xmf_name</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">xmf_name</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_new"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_new">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_new</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Creates a new xmf file.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xmf_snap_name</span><span class="p">(),</span> <span class="s">&#39;w&#39;</span><span class="p">)</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;&lt;?xml version=&quot;1.0&quot; ?&gt;</span>
+<span class="s">&lt;!DOCTYPE Xdmf SYSTEM &quot;Xdmf.dtd&quot; []&gt;</span>
+<span class="s">&lt;Xdmf xmlns:xi=&quot;http://www.w3.org/2003/XInclude&quot; Version=&quot;2.1&quot;&gt;</span>
+<span class="s">    &lt;Domain&gt;&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_finish"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_finish">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes final XML to ``.xmf`` file, and closes ``.xmf`` file.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">    &lt;/Domain&gt;</span>
+<span class="s">&lt;/Xdmf&gt;&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">completion_msg</span><span class="p">(</span><span class="s">&#39;Wrote metadata to </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> 
+                                                <span class="bp">self</span><span class="o">.</span><span class="n">xmf_snap_name</span><span class="p">())</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_grid_init"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_grid_init">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_grid_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">grid_name</span><span class="p">,</span> <span class="n">timestep</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes initial generic XML for both atom and gridded data</span>
+<span class="sd">        to ``.xmf`` file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        grid_name : string</span>
+<span class="sd">            Name for gridded dataset.</span>
+<span class="sd">            Usually snap dataset name.</span>
+<span class="sd">        timestep : int</span>
+<span class="sd">            Timestep for gridded dataset (e.g. 101000).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">            &lt;Grid Time=&quot;XXX_TIME_XXX&quot; Name=&quot;XXX_NAME_XXX&quot; GridType=&quot;Uniform&quot;&gt;</span>
+<span class="s">                &lt;Time Value=&quot;XXX_TIME_XXX&quot; /&gt;&quot;&quot;&quot;</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_TIME_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">timestep</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_NAME_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">grid_name</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_grid_atoms"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_grid_atoms">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_grid_atoms</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">num_atoms</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes XML for topology and geometry information for unstructured</span>
+<span class="sd">        ``Polyvertex`` grid.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">           Does not write ``xyz`` position of grid points to XML.</span>
+<span class="sd">           These are stored in the HDF file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        num_atoms : int</span>
+<span class="sd">            Number of atoms in grid.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">            &lt;Topology TopologyType=&quot;Polyvertex&quot; NumberOfElements=&quot;XXX_NELEMENTS_XXX&quot;/&gt;</span>
+<span class="s">            &lt;Geometry GeometryType=&quot;X_Y_Z&quot;&gt;</span>
+<span class="s">                &lt;DataItem Dimensions=&quot;XXX_NPOINTS_XXX&quot; NumberType=&quot;Float&quot; Format=&quot;HDF&quot;&gt;</span>
+<span class="s">                    XXX_FBASE_XXX:/XXX_DATASET_XXX/x</span>
+<span class="s">                &lt;/DataItem&gt;</span>
+<span class="s">                &lt;DataItem Dimensions=&quot;XXX_NPOINTS_XXX&quot; NumberType=&quot;Float&quot; Format=&quot;HDF&quot;&gt;</span>
+<span class="s">                    XXX_FBASE_XXX:/XXX_DATASET_XXX/y</span>
+<span class="s">                &lt;/DataItem&gt;</span>
+<span class="s">                &lt;DataItem Dimensions=&quot;XXX_NPOINTS_XXX&quot; NumberType=&quot;Float&quot; Format=&quot;HDF&quot;&gt;</span>
+<span class="s">                    XXX_FBASE_XXX:/XXX_DATASET_XXX/z</span>
+<span class="s">                &lt;/DataItem&gt;</span>
+<span class="s">            &lt;/Geometry&gt;&quot;&quot;&quot;</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_NELEMENTS_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">num_atoms</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_NPOINTS_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">num_atoms</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_FBASE_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DATASET_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_grid_regular"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_grid_regular">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_grid_regular</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">spacing</span><span class="p">,</span> <span class="n">origin</span><span class="p">,</span> <span class="n">num_elem</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes XML for topology and geometry for ``3DCORECTMesh``</span>
+<span class="sd">        (i.e. regular 3D grid orthogonal to coordinate axes).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        spacing : array_like</span>
+<span class="sd">            Vector (``length == 3``) for grid spacing along ``[x,y,z]`` axes.</span>
+<span class="sd">            Each element is either ``float`` or ``int``.</span>
+<span class="sd">        origin : array_like</span>
+<span class="sd">            Vector (``length == 3``) for location of origin of grid.</span>
+<span class="sd">            Each element is either ``float`` or ``int``.</span>
+<span class="sd">        num_elem :   array_like</span>
+<span class="sd">            Vector (``length == 3``) for number of grid elements along</span>
+<span class="sd">            ``[x,y,z]`` axes. Each element is ``int``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">            &lt;Topology TopologyType=&quot;3DCORECTMesh&quot; NumberOfElements=&quot;XXX_NX_XXX XXX_NY_XXX XXX_NZ_XXX &quot;/&gt;</span>
+<span class="s">            &lt;Geometry GeometryType=&quot;ORIGIN_DXDYDZ&quot;&gt;</span>
+<span class="s">                &lt;DataItem Dimensions=&quot;3 &quot; NumberType=&quot;Float&quot; Format=&quot;XML&quot;&gt;</span>
+<span class="s">                    XXX_ORGX_XXX XXX_ORGY_XXX XXX_ORGZ_XXX</span>
+<span class="s">                &lt;/DataItem&gt;</span>
+<span class="s">                &lt;DataItem Dimensions=&quot;3 &quot; NumberType=&quot;Float&quot; Format=&quot;XML&quot;&gt;</span>
+<span class="s">                    XXX_DX_XXX XXX_DY_XXX XXX_DZ_XXX</span>
+<span class="s">                &lt;/DataItem&gt;</span>
+<span class="s">            &lt;/Geometry&gt;&quot;&quot;&quot;</span>
+        <span class="n">num_elem</span> <span class="o">=</span> <span class="n">num_elem</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="s">&#39;int&#39;</span><span class="p">)</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_NX_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">num_elem</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_NY_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">num_elem</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_NZ_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">num_elem</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ORGX_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">origin</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ORGY_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">origin</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ORGZ_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">origin</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DX_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">spacing</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DY_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">spacing</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DZ_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">spacing</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_grid_finish"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_grid_finish">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_grid_finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes out finising XML Grid tag and closes ``.xmf`` file.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">            &lt;/Grid&gt;&quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_scalar_attribute"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_scalar_attribute">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_scalar_attribute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">location</span><span class="p">,</span> <span class="n">length</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes XML for scalar attribute.</span>
+<span class="sd">        Should only be used once grid/topology/geometry are already setup.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of attribute in HDF file.</span>
+<span class="sd">        dtype : string, {&#39;Int&#39; | &#39;Float&#39;}</span>
+<span class="sd">            Data type</span>
+<span class="sd">        location : string,  {&#39;Node&#39; | &#39;Cell&#39;}</span>
+<span class="sd">            Location of scalar attribute within grid cell.</span>
+<span class="sd">        length : int</span>
+<span class="sd">            Number of scalars (e.g. number of atoms or grid points).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">                    &lt;Attribute Type=&quot;Scalar&quot; Center=&quot;XXX_ATTRLOC_XXX&quot; Name=&quot;XXX_ATTRNAME_XXX&quot;&gt;</span>
+<span class="s">                        &lt;DataItem DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot; Format=&quot;HDF&quot;&gt;</span>
+<span class="s">                            XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_ATTRNAME_XXX</span>
+<span class="s">                        &lt;/DataItem&gt;</span>
+<span class="s">                    &lt;/Attribute&gt;&quot;&quot;&quot;</span>
+        
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s">&#39;int&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;Int&#39;</span>
+        <span class="k">elif</span> <span class="s">&#39;float&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;Float&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">raise</span> <span class="ne">UserWarning</span><span class="p">(</span><span class="s">&#39;Invalid data type submitted. </span><span class="se">\</span>
+<span class="s">                                                    Must be int* or float*.&#39;</span><span class="p">)</span>
+
+        <span class="c"># Replace the markers</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRLOC_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">location</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRNAME_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRLEN_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">length</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DTYPE_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_FBASE_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DATASET_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_vector_attribute"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_vector_attribute">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_vector_attribute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">location</span><span class="p">,</span>
+                                             <span class="n">length</span><span class="p">,</span> <span class="n">v0_name</span><span class="p">,</span> <span class="n">v1_name</span><span class="p">,</span> <span class="n">v2_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes XML for vector attribute.</span>
+<span class="sd">        Should only be used once grid/topology/geometry are already setup.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of attribute in HDF file.</span>
+<span class="sd">        dtype : string,  {&#39;Int&#39; | &#39;Float&#39;}</span>
+<span class="sd">            Data type.</span>
+<span class="sd">        length : int</span>
+<span class="sd">            Number of individual vectors within attribute</span>
+<span class="sd">            (e.g  number of atoms or grid points).</span>
+<span class="sd">        location : string,  {&#39;Node&#39; | &#39;Cell&#39;}</span>
+<span class="sd">            Location of scalar attribute within grid cell.</span>
+<span class="sd">        v{0,1,2}_name : string</span>
+<span class="sd">            Names of scalar values are to be the vector&#39;s components.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">                    &lt;Attribute Type=&quot;Vector&quot; Center=&quot;XXX_ATTRLOC_XXX&quot; Name=&quot;XXX_ATTRNAME_XXX&quot;&gt;</span>
+<span class="s">                        &lt;DataItem ItemType=&quot;Function&quot; Function=&quot;JOIN($0, $1, $2)&quot; Dimensions=&quot;XXX_ATTRLEN_XXX 3&quot;&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_V0_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_V0_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_V1_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_V1_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_V2_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_V2_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                        &lt;/DataItem&gt;</span>
+<span class="s">                    &lt;/Attribute&gt;&quot;&quot;&quot;</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s">&#39;int&#39;</span> <span class="ow">in</span> <span class="n">dtype</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;Int&#39;</span>
+        <span class="k">elif</span> <span class="s">&#39;float&#39;</span> <span class="ow">in</span> <span class="n">dtype</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;Float&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Invalid data type submitted. </span><span class="se">\</span>
+<span class="s">                                                      Must be int* or float*.&#39;</span><span class="p">)</span>
+
+        <span class="c"># Replace the markers</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRLOC_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">location</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRNAME_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRLEN_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">length</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DTYPE_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_FBASE_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DATASET_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">)</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_V0_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">v0_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_V1_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">v1_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_V2_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">v2_name</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_symm_tensor_attribute"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_symm_tensor_attribute">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_symm_tensor_attribute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">location</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span>
+                                    <span class="n">t0_name</span><span class="p">,</span> <span class="n">t1_name</span><span class="p">,</span> <span class="n">t2_name</span><span class="p">,</span>
+                                    <span class="n">t3_name</span><span class="p">,</span> <span class="n">t4_name</span><span class="p">,</span> <span class="n">t5_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes XML for symmetric tensor attribute.</span>
+<span class="sd">        Should be used once grid/topology/geometry are already setup.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of symmetric tensor attribute in HDF file.</span>
+<span class="sd">        dtype : string,  {&#39;Int&#39; | &#39;Float&#39;}</span>
+<span class="sd">            Data type.</span>
+<span class="sd">        location : string,  {&#39;Node&#39;|&#39;Cell&#39;}</span>
+<span class="sd">            Location of scalar attribute within grid cell.</span>
+<span class="sd">        length : int</span>
+<span class="sd">            Number of individual tensors within attribute</span>
+<span class="sd">            (e.g. number of atoms or grid points).</span>
+<span class="sd">        t{0,1,2,3,4,5}_name : string</span>
+<span class="sd">            Names of scalar values which are vector&#39;s components.</span>
+<span class="sd">            Order is: ``00, 01, 02, 11, 12, 22``, which is the same as the</span>
+<span class="sd">            order in LAMMPS (i.e. ``xx yy zz xy xz yz == 00 11 22 01 02 12``)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">                    &lt;Attribute Type=&quot;Tensor6&quot; Center=&quot;XXX_ATTRLOC_XXX&quot; Name=&quot;XXX_ATTRNAME_XXX&quot;&gt;</span>
+<span class="s">                        &lt;DataItem ItemType=&quot;Function&quot; Function=&quot;JOIN($0, $1, $2, $3, $4, $5)&quot; Dimensions=&quot;XXX_ATTRLEN_XXX 6&quot;&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T0_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T0_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T1_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T1_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T2_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T2_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T3_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T3_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T4_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T4_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T5_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T5_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                        &lt;/DataItem&gt;</span>
+<span class="s">                    &lt;/Attribute&gt;&quot;&quot;&quot;</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s">&#39;int&#39;</span> <span class="ow">in</span> <span class="n">dtype</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;Int&#39;</span>
+        <span class="k">elif</span> <span class="s">&#39;float&#39;</span> <span class="ow">in</span> <span class="n">dtype</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;Float&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Invalid data type submitted. </span><span class="se">\</span>
+<span class="s">                                                      Must be int* or float*.&#39;</span><span class="p">)</span>
+
+        <span class="c"># Replace the appropriate markers</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRLOC_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">location</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRNAME_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRLEN_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">length</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DTYPE_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_FBASE_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DATASET_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">)</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T0_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t0_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T1_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t1_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T2_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t2_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T3_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t3_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T4_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t4_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T5_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t5_name</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_tensor_attribute"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_tensor_attribute">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_tensor_attribute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">location</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span>
+                                <span class="n">t0_name</span><span class="p">,</span> <span class="n">t1_name</span><span class="p">,</span> <span class="n">t2_name</span><span class="p">,</span>
+                                <span class="n">t3_name</span><span class="p">,</span> <span class="n">t4_name</span><span class="p">,</span> <span class="n">t5_name</span><span class="p">,</span>
+                                <span class="n">t6_name</span><span class="p">,</span> <span class="n">t7_name</span><span class="p">,</span> <span class="n">t8_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes XML for general tensor attribute.</span>
+<span class="sd">        Should be used once grid/topology/geometry are already setup.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of tensor attribute in HDF file.</span>
+<span class="sd">        dtype : string,  {&#39;Int&#39; | &#39;Float&#39;}</span>
+<span class="sd">            Data type.</span>
+<span class="sd">        location : string,  {&#39;Node&#39; | &#39;Cell&#39;}</span>
+<span class="sd">            Location of scalar attribute within grid cell.</span>
+<span class="sd">        length : int</span>
+<span class="sd">            Number of individual tensors within attribute</span>
+<span class="sd">            (e.g. number of atoms).</span>
+<span class="sd">        t{0:8}_name: string</span>
+<span class="sd">            Names of scalar values which are the tensor components. Order is:            </span>
+<span class="sd">            ``00 01 02 10 11 12 20 21 22 or xx xy xz yx yy yz zx zy zz``</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">                    &lt;Attribute Type=&quot;Tensor&quot; Center=&quot;XXX_ATTRLOC_XXX&quot; Name=&quot;XXX_ATTRNAME_XXX&quot;&gt;</span>
+<span class="s">                        &lt;DataItem ItemType=&quot;Function&quot; Function=&quot;JOIN($0, $1, $2, $3, $4, $5, $6, $7, $8)&quot; Dimensions=&quot;XXX_ATTRLEN_XXX 9&quot;&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T0_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T0_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T1_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T1_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T2_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T2_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T3_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T3_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T4_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T4_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T5_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T5_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T6_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T6_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T7_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T7_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                            &lt;DataItem Name=&quot;XXX_T8_XXX&quot; Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX&quot;&gt;</span>
+<span class="s">                                XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_T8_XXX</span>
+<span class="s">                            &lt;/DataItem&gt;</span>
+<span class="s">                        &lt;/DataItem&gt;</span>
+<span class="s">                    &lt;/Attribute&gt;&quot;&quot;&quot;</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s">&#39;int&#39;</span> <span class="ow">in</span> <span class="n">dtype</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;Int&#39;</span>
+        <span class="k">elif</span> <span class="s">&#39;float&#39;</span> <span class="ow">in</span> <span class="n">dtype</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;Float&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Invalid data type submitted. </span><span class="se">\</span>
+<span class="s">                                                      Must be int* or float*.&#39;</span><span class="p">)</span>
+
+        <span class="c"># Replace the appropriate markers</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRLOC_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">location</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRNAME_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRLEN_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">length</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DTYPE_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_FBASE_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DATASET_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">)</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T0_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t0_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T1_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t1_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T2_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t2_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T3_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t3_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T4_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t4_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T5_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t5_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T6_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t6_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T7_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t7_name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_T8_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">t8_name</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_block_attribute"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_block_attribute">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_block_attribute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">attribute_type</span><span class="p">,</span>
+                                    <span class="n">dtype</span><span class="p">,</span> <span class="n">location</span><span class="p">,</span> <span class="n">length</span><span class="p">,</span> <span class="n">data_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Writes XML for data (scalars, vectors, tensors) stored as a</span>
+<span class="sd">        contiguous block of data rather than in separate blocks for each</span>
+<span class="sd">        component.</span>
+
+<span class="sd">        Should be used once grid/topology/geometry are already setup.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of attribute.</span>
+<span class="sd">        attribute_type : string,  </span>
+<span class="sd">            {&#39;scalar&#39; | &#39;vector&#39; | &#39;symm_tensor&#39; | &#39;tensor&#39; }</span>
+<span class="sd">            Type of attribute.</span>
+<span class="sd">        dtype : string,  {&#39;int&#39; | &#39;float&#39;}</span>
+<span class="sd">            Data type.</span>
+<span class="sd">        location : string,  {&#39;Node&#39; | &#39;Cell&#39;}</span>
+<span class="sd">            Location of scalar attribute within grid cell.</span>
+<span class="sd">        attrLen : int</span>
+<span class="sd">            Number of individual items within attribute</span>
+<span class="sd">            (e.g. number of atoms).</span>
+<span class="sd">        data_name : string</span>
+<span class="sd">            Name of data in HDF file dataset.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">                    &lt;Attribute Type=&quot;XXX_ATTRTYPE_XXX&quot; Center=&quot;XXX_ATTRLOC_XXX&quot; Name=&quot;XXX_ATTRNAME_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX XXX_ATTRWIDTH_XXX&quot;&gt;</span>
+<span class="s">                        &lt;DataItem Format=&quot;HDF&quot; DataType=&quot;XXX_DTYPE_XXX&quot; Dimensions=&quot;XXX_ATTRLEN_XXX XXX_ATTRWIDTH_XXX&quot;&gt;</span>
+<span class="s">                            XXX_FBASE_XXX:/XXX_DATASET_XXX/XXX_DATA_XXX</span>
+<span class="s">                        &lt;/DataItem&gt;</span>
+<span class="s">                    &lt;/Attribute&gt;&quot;&quot;&quot;</span>
+
+        <span class="c"># Identifying type of attribute</span>
+        <span class="n">attribute_type</span> <span class="o">=</span> <span class="n">attribute_type</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">attribute_type</span> <span class="o">==</span> <span class="s">&#39;scalar&#39;</span><span class="p">:</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="mi">1</span>
+        <span class="k">elif</span> <span class="n">attribute_type</span> <span class="o">==</span> <span class="s">&#39;vector&#39;</span><span class="p">:</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="mi">3</span>
+        <span class="k">elif</span> <span class="n">attribute_type</span> <span class="o">==</span> <span class="s">&#39;symm_tensor&#39;</span><span class="p">:</span>
+            <span class="n">attribute_type</span> <span class="o">=</span> <span class="s">&#39;Tensor6&#39;</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="mi">6</span>
+        <span class="k">elif</span> <span class="n">attribute_type</span> <span class="o">==</span> <span class="s">&#39;tensor&#39;</span><span class="p">:</span>
+            <span class="n">width</span> <span class="o">=</span> <span class="mi">9</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Invalid XDMF type submitted must be scalar, </span><span class="se">\</span>
+<span class="s">                                                vector, symm_tensor or tensor&#39;</span><span class="p">)</span>
+        <span class="n">attribute_type</span> <span class="o">=</span> <span class="n">attribute_type</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s">&#39;int&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;int&#39;</span>
+        <span class="k">elif</span> <span class="s">&#39;float&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;float&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Invalid data type submitted. </span><span class="se">\</span>
+<span class="s">                                                      Must be int* or float*.&#39;</span><span class="p">)</span>
+
+        <span class="c"># Replace the appropriate markers</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRTYPE_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">attribute_type</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRLOC_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">location</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRNAME_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRLEN_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">length</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_ATTRWIDTH_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">width</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DTYPE_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_FBASE_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DATASET_XXX&quot;</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">)</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_DATA_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">data_name</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.xmf_snap_file"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_snap_file">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_snap_file</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a new xmf file.  This is light operation as works with</span>
+<span class="sd">        metadata.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">xmf_new</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xmf_grid_init</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">,</span>
+                                                        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;time&#39;</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;atoms&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">xmf_grid_atoms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">])</span>
+            <span class="n">data_len</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">]</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;3DRegular&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">xmf_grid_regular</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_spacing&#39;</span><span class="p">],</span>
+                                  <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">origin</span><span class="p">,</span>
+                                  <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_elem&#39;</span><span class="p">])</span>
+            <span class="n">data_len</span> <span class="o">=</span> <span class="s">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">([</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_elem&#39;</span><span class="p">]])</span>
+
+        <span class="k">for</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">col_mapping</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="k">if</span> <span class="n">key</span> <span class="ow">in</span> <span class="p">(</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">vectors</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">+</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">tensors</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="o">+</span>
+                        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">symm_tensors</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span> <span class="p">):</span>
+                <span class="k">continue</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">xmf_scalar_attribute</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">[</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span> <span class="n">val</span><span class="p">[</span><span class="s">&#39;location&#39;</span><span class="p">],</span>
+                                                         <span class="n">data_len</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">vectors</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="k">if</span> <span class="s">&#39;comps&#39;</span> <span class="ow">in</span> <span class="n">val</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">xmf_vector_attribute</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">[</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span> <span class="n">val</span><span class="p">[</span><span class="s">&#39;location&#39;</span><span class="p">],</span>
+                                               <span class="n">data_len</span><span class="p">,</span> <span class="o">*</span><span class="n">val</span><span class="p">[</span><span class="s">&#39;comps&#39;</span><span class="p">])</span>
+            <span class="c"># Contiguous vector</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">xmf_block_attribute</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s">&#39;vector&#39;</span><span class="p">,</span> <span class="n">val</span><span class="p">[</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span>
+                                              <span class="n">val</span><span class="p">[</span><span class="s">&#39;location&#39;</span><span class="p">],</span> <span class="n">data_len</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">tensors</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="k">if</span> <span class="s">&#39;comps&#39;</span> <span class="ow">in</span> <span class="n">val</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">xmf_tensor_attribute</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">[</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span> <span class="n">val</span><span class="p">[</span><span class="s">&#39;location&#39;</span><span class="p">],</span>
+                                               <span class="n">data_len</span><span class="p">,</span> <span class="o">*</span><span class="n">val</span><span class="p">[</span><span class="s">&#39;comps&#39;</span><span class="p">])</span>
+            <span class="c"># Contiguous tensor</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">xmf_block_attribute</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s">&#39;tensor&#39;</span><span class="p">,</span> <span class="n">val</span><span class="p">[</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span>
+                                            <span class="n">val</span><span class="p">[</span><span class="s">&#39;location&#39;</span><span class="p">],</span> <span class="n">data_len</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">)</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">symm_tensors</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+            <span class="k">if</span> <span class="s">&#39;comps&#39;</span> <span class="ow">in</span> <span class="n">val</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">xmf_symm_tensor_attribute</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="n">val</span><span class="p">[</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span>
+                                <span class="n">val</span><span class="p">[</span><span class="s">&#39;location&#39;</span><span class="p">],</span> <span class="n">data_len</span><span class="p">,</span> <span class="o">*</span><span class="n">val</span><span class="p">[</span><span class="s">&#39;comps&#39;</span><span class="p">])</span>
+            <span class="c"># Contiguous symm_tensor</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">xmf_block_attribute</span><span class="p">(</span><span class="n">key</span><span class="p">,</span> <span class="s">&#39;symm_tensor&#39;</span><span class="p">,</span> <span class="n">val</span><span class="p">[</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span>
+                                            <span class="n">val</span><span class="p">[</span><span class="s">&#39;location&#39;</span><span class="p">],</span> <span class="n">data_len</span><span class="p">,</span> <span class="n">key</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">xmf_grid_finish</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xmf_finish</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">completion_msg</span><span class="p">(</span><span class="s">&#39;Done making new/updated xmf for </span><span class="se">\</span>
+<span class="s">               </span><span class="si">%s</span><span class="s"> dataset in </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">,</span> 
+                                    <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)</span> <span class="p">)</span>
+
+    <span class="c"># -------------------------------------------------------------------------</span>
+    <span class="c">#       HDF Functions</span>
+    <span class="c"># -------------------------------------------------------------------------</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.is_open"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.is_open">[docs]</a>    <span class="k">def</span> <span class="nf">is_open</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        If HDF file is open, returns ``True``.</span>
+<span class="sd">        </span>
+<span class="sd">        If HDF has not yet been opened at all, returns False.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">isopen</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">True</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">isopen</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">False</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.open_file"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.open_file">[docs]</a>    <span class="k">def</span> <span class="nf">open_file</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Checks if underlying snapshot file is open and available.  If not,</span>
+<span class="sd">        opens the file.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        f_hdf : ``PyTables file``</span>
+<span class="sd">            HDF file handle.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_open</span><span class="p">()</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">user_information</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> already open&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">filename</span><span class="p">):</span>
+                <span class="k">if</span> <span class="n">valid_file</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">filename</span><span class="p">):</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span> <span class="o">=</span> <span class="n">pyT</span><span class="o">.</span><span class="n">openFile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">filename</span><span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;File </span><span class="si">%s</span><span class="s"> not HDF5 file.&#39;</span> <span class="o">%</span>
+                                                            <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Creating </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span> <span class="o">=</span> <span class="n">pyT</span><span class="o">.</span><span class="n">openFile</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">filename</span><span class="p">,</span> <span class="s">&#39;a&#39;</span><span class="p">)</span>
+            <span class="c"># TODO: Do not return - need to abstract f_hdf out of Snap</span>
+            <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_create_array"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_create_array">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_create_array</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataArrayName</span><span class="p">,</span> <span class="n">dataArray</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;float&#39;</span><span class="p">,</span>
+                                    <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">,</span> <span class="n">update_meta</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create a new HDF array within the current dataset.</span>
+
+<span class="sd">        Wrapping of ``PyTables.createArray(...)``</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dataArrayName : string</span>
+<span class="sd">            Name of newly created HDF array.</span>
+<span class="sd">        dataArray : :class:`numpy.ndarray`</span>
+<span class="sd">            Numpy array to be written to HDF file.</span>
+<span class="sd">        dtype : string,  {&#39;Int&#39; | &#39;Float&#39;}</span>
+<span class="sd">            Data type.</span>
+<span class="sd">        location : string,  {&#39;Node&#39; | &#39;Cell&#39;}</span>
+<span class="sd">            Location of scalar attribute within grid cell.</span>
+<span class="sd">        update_meta : boolean,  [default: True]</span>
+<span class="sd">            Flag for updating HDF metadata.</span>
+<span class="sd">            (e.g. ``col_mapping``, ``vectors``, etc.)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s">&#39;float&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;Float&#39;</span>
+        <span class="k">elif</span> <span class="s">&#39;int&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;Int&#39;</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&quot;Invalid data type.  Must be &#39;int*&#39; or &#39;float*&#39;&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">location</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">LOCATIONS</span><span class="p">:</span>
+            <span class="n">location</span> <span class="o">=</span> <span class="n">location</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c"># TODO: Must be &#39;Node&#39; for atmowise dataset.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&quot;Data location must be either &#39;Node&#39; or &#39;Cell&#39;&quot;</span><span class="p">)</span>
+
+        <span class="c"># Enforcing dtype from function parameter</span>
+        <span class="n">dataArray</span> <span class="o">=</span> <span class="n">vectors</span><span class="o">.</span><span class="n">vector_type_conv</span><span class="p">(</span><span class="n">dataArray</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">))</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">createArray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset</span><span class="p">,</span>
+                                     <span class="nb">str</span><span class="p">(</span><span class="n">dataArrayName</span><span class="p">),</span> <span class="n">dataArray</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">update_meta</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">hdf_update_col_mapping</span><span class="p">(</span><span class="n">dataArrayName</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
+                                                                <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_create_EArray"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_create_EArray">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_create_EArray</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">EArrayName</span><span class="p">,</span> <span class="n">shapeTuple</span><span class="p">,</span>
+                               <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">,</span>
+                               <span class="n">expectedrows</span><span class="o">=</span><span class="mi">100000</span><span class="p">,</span> <span class="n">update_meta</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create new **extensible** HDF array within current dataset.</span>
+
+<span class="sd">        Wrapping of ``PyTables.createEArray(...)``</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        EArrayName : string</span>
+<span class="sd">            Name of extendable array to be created</span>
+<span class="sd">        shapeTuple : iterable</span>
+<span class="sd">            Shape of ``EArray``. Must have at least one value set to 0.</span>
+<span class="sd">        dtype : string,  {&#39;Int&#39; | &#39;Float&#39;}</span>
+<span class="sd">            Data type string for array.</span>
+<span class="sd">        location : string,  {&#39;Node&#39; | &#39;Cell&#39;}</span>
+<span class="sd">            Location of scalar attribute within grid cell.</span>
+<span class="sd">        expectedrows : int,  [default=100000]</span>
+<span class="sd">            Good guess at expected number of rows to improve speed.</span>
+<span class="sd">        update_meta : boolean,  [default: True]</span>
+<span class="sd">            Flag for updating HDF metadata.</span>
+<span class="sd">            (e.g. ``col_mapping``, ``vectors``, etc.).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">expectedrows</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">expectedrows</span><span class="p">)</span>
+
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s">&#39;float&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">atom</span> <span class="o">=</span> <span class="n">pyT</span><span class="o">.</span><span class="n">FloatAtom</span><span class="p">()</span>
+        <span class="k">elif</span> <span class="s">&#39;int&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">atom</span> <span class="o">=</span> <span class="n">pyT</span><span class="o">.</span><span class="n">IntAtom</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&quot;Invalid data type.  Must be &#39;int*&#39; or &#39;float*&#39;&quot;</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">location</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">LOCATIONS</span><span class="p">:</span>
+            <span class="n">location</span> <span class="o">=</span> <span class="n">location</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c"># TODO: Must be &#39;Node&#39; for atmowise dataset.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&quot;Data location must be either &#39;Node&#39; or &#39;Cell&#39;&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">createEArray</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset</span><span class="p">,</span>
+                              <span class="nb">str</span><span class="p">(</span><span class="n">EArrayName</span><span class="p">),</span> <span class="n">atom</span><span class="p">,</span> <span class="n">shapeTuple</span><span class="p">,</span> <span class="n">expectedrows</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">update_meta</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">hdf_update_col_mapping</span><span class="p">(</span><span class="n">EArrayName</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+                                                  <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_EArray_append_data"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_EArray_append_data">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_EArray_append_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">EArrayName</span><span class="p">,</span> <span class="n">dataArray</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Append new data from dataArray to existing extensible EArray.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        EArrayName : string</span>
+<span class="sd">            Name of extensible HDF ``EArray`` target.</span>
+<span class="sd">        dataArray : :class:`numpy.ndarray`</span>
+<span class="sd">            Data to be added.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c">#TODO: Add try/except to handle if target EArray doesn&#39;t yet exist.</span>
+        <span class="c">#TODO:  Catch difference in shape btw dataArray and EArray</span>
+        <span class="n">EArray</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">getNode</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">,</span>
+                                                                   <span class="n">EArrayName</span><span class="p">)</span>
+
+        <span class="n">dtype</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">EArray</span><span class="o">.</span><span class="n">atom</span><span class="p">)</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="k">if</span> <span class="s">&#39;float&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;float&#39;</span>
+        <span class="k">if</span> <span class="s">&#39;int&#39;</span> <span class="ow">in</span> <span class="n">dtype</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="s">&#39;int&#39;</span>
+
+        <span class="c"># Enforcing dtype from function parameter</span>
+        <span class="n">dataArray</span> <span class="o">=</span> <span class="n">vectors</span><span class="o">.</span><span class="n">vector_type_conv</span><span class="p">(</span><span class="n">dataArray</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">dtype</span><span class="p">))</span>
+        <span class="n">EArray</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">dataArray</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_create_dataset"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_create_dataset">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_create_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Create new dataset at the root of HDF file.</span>
+
+<span class="sd">        Dataset, ``&#39;rawSimResults&#39;`` always exists to hold atomwise simulation</span>
+<span class="sd">        results, so should not be used.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">           Does not overwrite an existing dataset.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        new_name : string</span>
+<span class="sd">            Name of new data set to create at root (i.e. ``&#39;/&#39;``) of HDF file.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c">#TODO: Add try/except around attempt to create new dataset.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">createGroup</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">new_name</span><span class="p">))</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_delete_array"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_delete_array">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_delete_array</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">arrayName</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Remove existing HDF array from current dataset.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        arrayName : string</span>
+<span class="sd">            Name of array to remove.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c">#TODO: Add try/except around attempt to get target array.</span>
+        <span class="n">array</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset</span><span class="o">.</span><span class="n">_f_getChild</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">arrayName</span><span class="p">))</span>
+        <span class="n">array</span><span class="o">.</span><span class="n">remove</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_rename_dataset"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_rename_dataset">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_rename_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">newName</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Renames currently active dataset on the fly so that snap</span>
+<span class="sd">        continues to point to same data before and after.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        newName : string</span>
+<span class="sd">            New dataset name.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset</span><span class="o">.</span><span class="n">_f_rename</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">newName</span><span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">set_active_dataset</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">newName</span><span class="p">))</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_delete_dataset"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_delete_dataset">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_delete_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">dataset_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Removes dataset located at the root of the HDF file.</span>
+
+<span class="sd">        .. warning::</span>
+<span class="sd">           Acts recursively and destructively, deleting all data arrays</span>
+<span class="sd">           contained within the dataset.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        dataset_name : string</span>
+<span class="sd">            Name of dataset to delete.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">dataset_name</span> <span class="o">==</span> <span class="s">&#39;rawSimResults&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Cannot delete rawSimResults.&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">util</span><span class="o">.</span><span class="n">user_approve</span><span class="p">(</span><span class="s">&#39;Remove </span><span class="si">%s</span><span class="s"> ?&#39;</span> <span class="o">%</span> <span class="n">dataset_name</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">removeNode</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="o">+</span><span class="nb">str</span><span class="p">(</span><span class="n">dataset_name</span><span class="p">),</span>
+                                                                <span class="n">recursive</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> not removed.&#39;</span> <span class="o">%</span> <span class="n">dataset_name</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_add_meta"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_add_meta">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_add_meta</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metaName</span><span class="p">,</span> <span class="n">metaValue</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Add metadata to HDF file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        metaName : string</span>
+<span class="sd">            Name of metadata item.</span>
+<span class="sd">        metaValue : object</span>
+<span class="sd">            Object to store in HDF metadata for active dataset in HDF file.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset</span><span class="o">.</span><span class="n">_v_attrs</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">metaName</span><span class="p">),</span> <span class="n">metaValue</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_rename_meta"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_rename_meta">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_rename_meta</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">currentName</span><span class="p">,</span> <span class="n">newName</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Rename existing metadata entry in HDF file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        currentName : string</span>
+<span class="sd">            Current name of metadata entry.</span>
+<span class="sd">        newName : string</span>
+<span class="sd">            New name of metadata entry.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset</span><span class="o">.</span><span class="n">_v_attrs</span><span class="o">.</span><span class="n">_f_rename</span><span class="p">(</span>
+                                                <span class="nb">str</span><span class="p">(</span><span class="n">currentName</span><span class="p">),</span> <span class="nb">str</span><span class="p">(</span><span class="n">newName</span><span class="p">))</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_modify_meta"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_modify_meta">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_modify_meta</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metaName</span><span class="p">,</span> <span class="n">metaValue</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Change value of existing metadata entry in HDF file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        metaName : string</span>
+<span class="sd">            Name of existing metadata entry.</span>
+<span class="sd">        metaValue : object</span>
+<span class="sd">            New value of metadata entry.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset</span><span class="o">.</span><span class="n">_v_attrs</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">metaName</span><span class="p">),</span> <span class="n">metaValue</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_delete_meta"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_delete_meta">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_delete_meta</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">metaName</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Delete existing metadata entry.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        metaName : string</span>
+<span class="sd">            Name of metadata entry to be deleted.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c">#TODO: try/except in case entry does not exist.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset</span><span class="o">.</span><span class="n">_f_delAttr</span><span class="p">(</span><span class="n">metaName</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_update_col_mapping"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_update_col_mapping">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_update_col_mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Update ``col_mapping`` metadata in current HDF dataset to reflect</span>
+<span class="sd">        changes in underlying data arrays.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of scalar attribute to update.</span>
+<span class="sd">        dtype:  string,  {&#39;Int&#39; | &#39;Float&#39;}, [default=&#39;&#39;]</span>
+<span class="sd">            New dtype.  If not changing dtype, do not use argument.</span>
+<span class="sd">        location : string,  {&#39;Node&#39; | &#39;Cell&#39;},  [default=&#39;&#39;]</span>
+<span class="sd">            New location of scalar attribute.</span>
+<span class="sd">            If not changing location, do not use argument.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># TODO: checks for dtype and location w/i allowable options.</span>
+        <span class="k">if</span> <span class="n">dtype</span> <span class="o">==</span> <span class="s">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">col_mapping</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">location</span> <span class="o">==</span> <span class="s">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">location</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">col_mapping</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s">&#39;location&#39;</span><span class="p">]</span>
+
+        <span class="n">curr_mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">col_mapping</span>
+
+        <span class="c"># Adds new entry to col_mapping if name is not present</span>
+        <span class="n">curr_mapping</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;dtype&#39;</span><span class="p">:</span> <span class="n">dtype</span><span class="p">,</span> <span class="s">&#39;location&#39;</span><span class="p">:</span> <span class="n">location</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">hdf_modify_meta</span><span class="p">(</span><span class="s">&#39;col_mapping&#39;</span><span class="p">,</span> <span class="n">curr_mapping</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.hdf_update_composite_mapping"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.hdf_update_composite_mapping">[docs]</a>    <span class="k">def</span> <span class="nf">hdf_update_composite_mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">type_mapping</span><span class="p">,</span>
+                                   <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">,</span>  <span class="n">comps</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Updates the metadata used to describe the composition of</span>
+<span class="sd">        vectors and tensors (e.g. components, dtype, grid location).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of attribute to update (e.g. vector or tensor name).</span>
+<span class="sd">        type_mapping : string,  {&#39;vectors&#39; |  &#39;tensors&#39; | &#39;symm_tensors&#39;}</span>
+<span class="sd">            Type of attribute.</span>
+<span class="sd">        dtype : string,  {&#39;Int&#39; | &#39;Float&#39;},  [default=&#39;&#39;]</span>
+<span class="sd">            New dtype.  If not changing dtype, use default.</span>
+<span class="sd">        location : string,  {&#39;Node&#39; | &#39;Cell&#39;},  [default=&#39;&#39;]</span>
+<span class="sd">            New location of scalar attribute within grid cell.</span>
+<span class="sd">            If not changing location, use default.</span>
+<span class="sd">        comps : iterable,  [default=&#39;&#39;]</span>
+<span class="sd">            Name of underlying data used for components of vector or tensor.</span>
+<span class="sd">            (e.g. ``[&#39;vx&#39;, &#39;vy&#39;, &#39;vz&#39;]``)</span>
+<span class="sd">            Use ``None`` for a contiguous item without separate components</span>
+<span class="sd">            (i.e. a vector stored as a (Nx3) array rather than 3 (Nx1) arrays).</span>
+<span class="sd">            Use the default if want to leave ``comps`` unchanged.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="n">type_mapping</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">PROP_SIZE</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Invalid collection type </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">type_mapping</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">type_mapping</span> <span class="o">==</span> <span class="s">&#39;scalars&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&quot;Collection type is scalars - do nothing&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="n">curr_mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_metadata</span><span class="p">(</span><span class="n">type_mapping</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dtype</span> <span class="o">==</span> <span class="s">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="n">curr_mapping</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">location</span> <span class="o">==</span> <span class="s">&#39;&#39;</span><span class="p">:</span>
+            <span class="n">location</span> <span class="o">=</span> <span class="n">curr_mapping</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s">&#39;location&#39;</span><span class="p">]</span>
+        <span class="k">if</span> <span class="n">comps</span> <span class="o">==</span> <span class="s">&#39;&#39;</span><span class="p">:</span>
+            <span class="c"># Not a contiguous item i.e. separate comp names exist.</span>
+            <span class="k">if</span> <span class="s">&#39;comps&#39;</span> <span class="ow">in</span> <span class="n">curr_mapping</span><span class="p">[</span><span class="n">name</span><span class="p">]:</span>
+                <span class="n">comps</span> <span class="o">=</span> <span class="n">curr_mapping</span><span class="p">[</span><span class="n">name</span><span class="p">][</span><span class="s">&#39;comps&#39;</span><span class="p">]</span>
+            <span class="c"># Contiguous parameter w/o need for separate comp names.</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">comps</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="k">assert</span> <span class="n">dtype</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">DTYPES</span>
+        <span class="k">assert</span> <span class="n">location</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">LOCATION</span>
+        <span class="k">if</span> <span class="n">comps</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">comps</span><span class="p">)</span> <span class="o">==</span> <span class="n">settings</span><span class="o">.</span><span class="n">PROP_SIZE</span><span class="p">[</span><span class="n">type_mapping</span><span class="p">]</span>
+
+        <span class="n">curr_mapping</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;location&#39;</span><span class="p">:</span> <span class="n">location</span><span class="p">,</span>
+                              <span class="s">&#39;dtype&#39;</span><span class="p">:</span> <span class="n">dtype</span><span class="p">,</span>
+                              <span class="s">&#39;comps&#39;</span><span class="p">:</span> <span class="n">comps</span><span class="p">}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">hdf_modify_meta</span><span class="p">(</span><span class="n">type_mapping</span><span class="p">,</span> <span class="n">curr_mapping</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.flush"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.flush">[docs]</a>    <span class="k">def</span> <span class="nf">flush</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Flusses I/O buffer to bring HDF file on disk up to date</span>
+<span class="sd">        with any changes.</span>
+
+<span class="sd">        Wrapper on PyTables flush function.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="XDMFWriter.cleanup"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.cleanup">[docs]</a>    <span class="k">def</span> <span class="nf">cleanup</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Cleanup and close out HDF file.</span>
+
+<span class="sd">        .. note:: </span>
+<span class="sd">           When Python process exits, existing PyTables flush and close</span>
+<span class="sd">           functions run automatically.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">flush</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Flush and close </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">filename</span><span class="p">)</span>
+
+
+
+
+<span class="c"># =============================================================================</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

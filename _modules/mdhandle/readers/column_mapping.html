@@ -1,0 +1,554 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.readers.column_mapping &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="up" title="mdhandle.readers" href="../readers.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../readers.html" accesskey="U">mdhandle.readers</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.readers.column_mapping</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Provides functions for mapping column numbers, names, data types from LAMMPS</span>
+<span class="sd">dump files.</span>
+
+<span class="sd">Used in creating columnMapping metadata within HDF files.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c"># TODO: Enable vector/tensors/symm tensors to read from file</span>
+<span class="c"># TODO: Abstraction for input testing to avoid repeated code.</span>
+<span class="c"># TODO: Merge number and no-number functions (argument)</span>
+<span class="c"># TODO: Merge user and file based results ( default args ? )</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="kn">import</span> <span class="nn">mdhandle.utilities</span> <span class="kn">as</span> <span class="nn">util</span>
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">settings</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="lammps_mapping"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.column_mapping.lammps_mapping">[docs]</a><span class="k">def</span> <span class="nf">lammps_mapping</span><span class="p">(</span><span class="n">dump_fn</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Reads column mapping of self-describing LAMMPS dump file from the 9th line.</span>
+<span class="sd">    LAMMPS dumpe files were made self describing after approx 2007.</span>
+
+<span class="sd">    Intended for use in reading LAMMPS ASCII files.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    dump_fn : string</span>
+<span class="sd">        Name of LAMMPS dump file name to be read.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    columnsDict : dict</span>
+<span class="sd">        Mapping of column number, name, type and location.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">dump_fn</span><span class="p">,</span> <span class="s">&#39;r&#39;</span><span class="p">)</span>
+
+    <span class="c"># Burning off all but the last line of the header.</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">settings</span><span class="o">.</span><span class="n">LAMMPSHEADER</span><span class="p">)</span> <span class="o">-</span> <span class="mi">1</span><span class="p">):</span>
+        <span class="n">f</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
+
+    <span class="n">self_description</span> <span class="o">=</span> <span class="n">f</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
+
+    <span class="c"># First two items are &#39;ITEM&#39; and &#39;ATOMS&#39;</span>
+    <span class="n">self_description</span> <span class="o">=</span> <span class="n">self_description</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">2</span><span class="p">:]</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">request</span><span class="p">(</span><span class="s">&#39;Input dtype and grid location:&#39;</span><span class="p">,</span> <span class="n">input_type</span><span class="o">=</span><span class="s">&#39;raw&#39;</span><span class="p">)</span>
+
+    <span class="n">columnsDict</span> <span class="o">=</span> <span class="p">{}</span>
+    <span class="k">for</span> <span class="n">col</span><span class="p">,</span> <span class="n">name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">self_description</span><span class="p">):</span>
+        <span class="n">goodInput</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="k">while</span> <span class="ow">not</span> <span class="n">goodInput</span><span class="p">:</span>
+            <span class="n">usrIn</span> <span class="o">=</span> <span class="nb">raw_input</span><span class="p">(</span><span class="s">&quot;</span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s"> --&gt; &quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">col</span><span class="p">,</span> <span class="n">name</span><span class="p">))</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">())</span> <span class="o">!=</span> <span class="mi">2</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;Input format is: dtype location&#39;</span><span class="p">)</span>
+                <span class="k">continue</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">dtype</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+                <span class="n">location</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">1</span><span class="p">])</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+
+            <span class="k">if</span> <span class="n">location</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">LOCATIONS</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&quot;Data location must be </span><span class="si">%s</span><span class="s">.&quot;</span> <span class="o">%</span>
+                                                            <span class="n">settings</span><span class="o">.</span><span class="n">LOCATIONS</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="k">if</span> <span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">DTYPES</span><span class="p">:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&quot;dtype must be </span><span class="si">%s</span><span class="s">.&quot;</span> <span class="o">%</span> <span class="n">settings</span><span class="o">.</span><span class="n">DTYPES</span><span class="p">)</span>
+                <span class="k">continue</span>
+
+            <span class="n">columnsDict</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">col</span><span class="o">=</span><span class="n">col</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">)</span>
+            <span class="n">goodInput</span> <span class="o">=</span> <span class="bp">True</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Scalar columns:&#39;</span><span class="p">)</span>
+    <span class="n">print_ordered_columns</span><span class="p">(</span><span class="n">columnsDict</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">util</span><span class="o">.</span><span class="n">user_approve</span><span class="p">(</span><span class="s">&#39;Is this mapping correct?&#39;</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">util</span><span class="o">.</span><span class="n">user_approve</span><span class="p">(</span><span class="s">&#39;Print column data to file?&#39;</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">request</span><span class="p">(</span><span class="s">&#39;Column file name: &#39;</span><span class="p">)</span>
+            <span class="n">out_fn</span> <span class="o">=</span> <span class="nb">raw_input</span><span class="p">(</span><span class="s">&#39;&gt;&gt;&gt; &#39;</span><span class="p">)</span>
+            <span class="n">outf</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">out_fn</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)</span>
+            <span class="n">outf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&#39;#column name dtype location&#39;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">columnsDict</span><span class="p">:</span>
+                <span class="n">outf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="si">%d</span><span class="s"> </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="se">\n</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">columnsDict</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;col&#39;</span><span class="p">],</span> <span class="n">k</span><span class="p">,</span>
+                                              <span class="n">columnsDict</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span>
+                                              <span class="n">columnsDict</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;location&#39;</span><span class="p">]))</span>
+        <span class="k">return</span> <span class="n">columnsDict</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;Going to user input for column mapping.&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">user_mapping</span><span class="p">(</span><span class="n">self_description</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="file_mapping"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.column_mapping.file_mapping">[docs]</a><span class="k">def</span> <span class="nf">file_mapping</span><span class="p">(</span><span class="n">col_file</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">required</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">comment</span><span class="o">=</span><span class="s">&#39;#&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Reads file mapping column number to names,  data type and grid location for</span>
+<span class="sd">    reading LAMMPS ASCII data files.</span>
+
+<span class="sd">    Fully describes the construction of all scalars from LAMMPS dump file.</span>
+
+<span class="sd">    File format: number name dtype location</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    col_file : string, [default=&#39;&#39;]</span>
+<span class="sd">        File to be used for mapping names and types to columns.</span>
+<span class="sd">        Must be in format ``&#39;n name type location&#39;``.</span>
+<span class="sd">        </span>
+<span class="sd">        Type must be {&#39;Int&#39; | &#39;Float&#39;}.</span>
+<span class="sd">        </span>
+<span class="sd">        Location is optiontal, but must be {&#39;Node&#39; | &#39;Cell&#39;}, </span>
+<span class="sd">        [Default = &#39;Node&#39;]</span>
+
+<span class="sd">    required : iterable, [default=None]</span>
+<span class="sd">        List of required column names.</span>
+<span class="sd">    comment : string, [default=&#39;#&#39;]</span>
+<span class="sd">        Comment character</span>
+
+<span class="sd">    Return</span>
+<span class="sd">    -------</span>
+<span class="sd">    columnsDict : dict</span>
+<span class="sd">        Mapping of column names, dtypes, locations to column number.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">columnsDict</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">if</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">(</span><span class="n">col_file</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;Column file provided does not exist.&#39;</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;Going to user input&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">user_mapping</span><span class="p">(</span><span class="n">required</span><span class="p">)</span>
+
+    <span class="n">f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">col_file</span><span class="p">)</span>
+
+    <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f</span><span class="p">:</span>
+        <span class="c"># Removing white space before and after.</span>
+        <span class="n">line</span> <span class="o">=</span> <span class="n">line</span><span class="o">.</span><span class="n">strip</span><span class="p">()</span>
+
+        <span class="c"># Ignoring header with &#39;#&#39; comment char.</span>
+        <span class="k">if</span> <span class="n">line</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="n">comment</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">location</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">location</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">LOCATIONS</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&quot;Data location must be </span><span class="si">%s</span><span class="s">.&quot;</span> <span class="o">%</span> <span class="n">settings</span><span class="o">.</span><span class="n">LOCATIONS</span><span class="p">)</span>
+            <span class="n">user_mapping</span><span class="p">(</span><span class="n">required</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">DTYPES</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&quot;Data type must be </span><span class="si">%s</span><span class="s">.&quot;</span> <span class="o">%</span> <span class="n">settings</span><span class="o">.</span><span class="n">DTYPES</span><span class="p">)</span>
+            <span class="n">user_mapping</span><span class="p">(</span><span class="n">required</span><span class="p">)</span>
+
+        <span class="n">columnsDict</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">col</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">)</span>
+
+    <span class="n">f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+    
+    <span class="k">if</span> <span class="n">required</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">elif</span> <span class="nb">all</span><span class="p">(</span> <span class="p">[(</span><span class="n">i</span> <span class="ow">in</span> <span class="n">columnsDict</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">required</span><span class="p">]</span> <span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> required. Restarting&#39;</span> <span class="o">%</span> <span class="n">required</span><span class="p">)</span>
+        <span class="n">user_mapping</span><span class="p">(</span><span class="n">required</span><span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Scalar columns:&#39;</span><span class="p">)</span>
+    <span class="n">print_ordered_columns</span><span class="p">(</span><span class="n">columnsDict</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">util</span><span class="o">.</span><span class="n">user_approve</span><span class="p">(</span><span class="s">&#39;Is this mapping correct?&#39;</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">columnsDict</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;Restarting user input for column mapping.&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">user_mapping</span><span class="p">(</span><span class="n">required</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="user_mapping"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.column_mapping.user_mapping">[docs]</a><span class="k">def</span> <span class="nf">user_mapping</span><span class="p">(</span><span class="n">required</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Takes user input to identify the column name, number, data type</span>
+<span class="sd">    and grid location in LAMMPS ASCII data files.</span>
+
+<span class="sd">    * User input must be in format ``&#39;n name type location&#39;``.</span>
+<span class="sd">    * No spaces alled within name</span>
+<span class="sd">    * Type must be {&#39;int&#39; | &#39;float&#39;}</span>
+<span class="sd">    * Grid location must be {&#39;Node&#39; | &#39;Cell&#39;}</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    required : iterable, [default=None]</span>
+<span class="sd">        List of required data columns.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    columnsDict : dict</span>
+<span class="sd">       Mapping of column names, dtypes, locations to column number.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">procedure_banner</span><span class="p">(</span><span class="s">&#39;User Input for Scalar Identification&#39;</span><span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">request</span><span class="p">(</span><span class="s">&quot;Input number, name, dtype and location</span><span class="se">\n\</span>
+<span class="s">                    (zero-indexed, blank line to end): &quot;</span><span class="p">)</span>
+
+    <span class="n">usrIn</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="n">columnsDict</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">while</span> <span class="n">usrIn</span> <span class="o">!=</span> <span class="s">&#39;&#39;</span><span class="p">:</span>
+        <span class="n">usrIn</span> <span class="o">=</span> <span class="nb">raw_input</span><span class="p">(</span><span class="s">&quot;--&gt; &quot;</span><span class="p">)</span>
+
+        <span class="c"># loop exit condition</span>
+        <span class="k">if</span> <span class="n">usrIn</span> <span class="o">==</span> <span class="s">&#39;&#39;</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">())</span> <span class="o">!=</span> <span class="mi">4</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;Input format is: number name dtype location&#39;</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">n</span> <span class="o">=</span> <span class="nb">int</span><span class="p">(</span><span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&quot;Column number must be an integer&quot;</span><span class="p">)</span>
+            <span class="k">continue</span>
+        <span class="n">name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">1</span><span class="p">])</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">2</span><span class="p">])</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">location</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">3</span><span class="p">])</span><span class="o">.</span><span class="n">title</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">location</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">LOCATIONS</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&quot;Data location must be </span><span class="si">%s</span><span class="s">.&quot;</span> <span class="o">%</span> <span class="n">settings</span><span class="o">.</span><span class="n">LOCATIONS</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">DTYPES</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&quot;dtype must be </span><span class="si">%s</span><span class="s">.&quot;</span> <span class="o">%</span> <span class="n">settings</span><span class="o">.</span><span class="n">DTYPES</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="n">columnsDict</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">col</span><span class="o">=</span><span class="n">n</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">required</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+        <span class="k">pass</span>
+    <span class="k">elif</span> <span class="nb">all</span><span class="p">(</span> <span class="p">[</span> <span class="p">(</span><span class="n">i</span> <span class="ow">in</span> <span class="n">columnsDict</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">required</span><span class="p">])</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> required. Restarting&#39;</span> <span class="o">%</span> <span class="n">required</span><span class="p">)</span>
+        <span class="n">user_mapping</span><span class="p">(</span><span class="n">required</span><span class="p">)</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Scalar columns:&#39;</span><span class="p">)</span>
+    <span class="n">print_ordered_columns</span><span class="p">(</span><span class="n">columnsDict</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">util</span><span class="o">.</span><span class="n">user_approve</span><span class="p">(</span><span class="s">&#39;Is this mapping correct?&#39;</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">util</span><span class="o">.</span><span class="n">user_approve</span><span class="p">(</span><span class="s">&#39;Print column data to file?&#39;</span><span class="p">)</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">request</span><span class="p">(</span><span class="s">&#39;Column file name: &#39;</span><span class="p">)</span>
+            <span class="n">out_fn</span> <span class="o">=</span> <span class="nb">raw_input</span><span class="p">(</span><span class="s">&#39;&gt;&gt;&gt; &#39;</span><span class="p">)</span>
+            <span class="n">outf</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="n">out_fn</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">columnsDict</span><span class="p">:</span>
+                <span class="n">outf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="s">&quot;</span><span class="si">%d</span><span class="s"> </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="se">\n</span><span class="s">&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="n">columnsDict</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;col&#39;</span><span class="p">],</span> <span class="n">k</span><span class="p">,</span>
+                                              <span class="n">columnsDict</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span>
+                                              <span class="n">columnsDict</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;location&#39;</span><span class="p">]))</span>
+        <span class="k">return</span> <span class="n">columnsDict</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;Restarting user input for column mapping.&#39;</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">user_mapping</span><span class="p">(</span><span class="n">required</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="convert_from_num"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.column_mapping.convert_from_num">[docs]</a><span class="k">def</span> <span class="nf">convert_from_num</span><span class="p">(</span><span class="n">col_mapping</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Removes numbering in column mapping.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    col_mapping : dict</span>
+<span class="sd">        Column mapping linking item name to column number, data type and</span>
+<span class="sd">        location.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    columnsDict : dict</span>
+<span class="sd">        Returns column mapping without column number.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">dict</span><span class="p">(</span> <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="nb">dict</span><span class="p">(</span><span class="n">dtype</span><span class="o">=</span><span class="n">col_mapping</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span>
+                          <span class="n">location</span><span class="o">=</span><span class="n">col_mapping</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;location&#39;</span><span class="p">]</span> <span class="p">)</span>  <span class="p">)</span>
+                   <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">col_mapping</span>  <span class="p">)</span>
+
+</div>
+<span class="k">def</span> <span class="nf">_identify_collections</span><span class="p">(</span><span class="n">col_mapping</span><span class="p">,</span> <span class="n">kind</span><span class="o">=</span><span class="s">&#39;vectors&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Produces dictionary containing the name (key),  components, data type</span>
+<span class="sd">    and grid location (i.e. &#39;Node&#39;, &#39;Cell&#39;) of vectors,tensors and symmetric</span>
+<span class="sd">    tensors.</span>
+
+<span class="sd">    Based on user input at the command line.</span>
+<span class="sd">    Intended for use in one time conversion of LAMMPS output.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    col_mapping : dict</span>
+<span class="sd">        Dictionary mapping scalar name, column number, dtype and location.</span>
+<span class="sd">    kind : string, {&#39;vectors&#39; | &#39;tensors&#39; | &#39;symm_tensors&#39;}, [default=&#39;vectors&#39;]</span>
+<span class="sd">        Type of data to be identified.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    collection : dict</span>
+<span class="sd">        Returns dictionary mapping name of collection to components, data</span>
+<span class="sd">        type and grid location.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">if</span> <span class="n">kind</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">PROP_SIZE</span> <span class="ow">and</span> <span class="n">kind</span> <span class="o">!=</span> <span class="s">&#39;scalars&#39;</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Invalid collection type.  </span><span class="se">\n\</span>
+<span class="s">                      </span><span class="se">\t</span><span class="s"> Must be: &quot;vector&quot;, &quot;tensor&quot;, or &quot;symm_tensor&quot;.&#39;</span><span class="p">)</span>
+
+    <span class="c"># ----------------- USER INPUT  -------------------------------------------</span>
+
+    <span class="n">logger</span><span class="o">.</span><span class="n">procedure_banner</span><span class="p">(</span><span class="s">&#39;User Input for </span><span class="si">%s</span><span class="s"> Identification&#39;</span> <span class="o">%</span> <span class="n">kind</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Input: name and components&#39;</span><span class="p">)</span>
+    <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;(space separated, blank line to end):&#39;</span><span class="p">)</span>
+
+    <span class="n">usrIn</span> <span class="o">=</span> <span class="bp">None</span>
+    <span class="n">collection</span> <span class="o">=</span> <span class="p">{}</span>
+
+    <span class="k">while</span> <span class="n">usrIn</span> <span class="o">!=</span> <span class="s">&#39;&#39;</span><span class="p">:</span>
+        <span class="n">usrIn</span> <span class="o">=</span> <span class="n">logger</span><span class="o">.</span><span class="n">request</span><span class="p">(</span><span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">input_type</span><span class="o">=</span><span class="s">&#39;raw&#39;</span><span class="p">)</span>
+
+        <span class="c"># loop exit condition</span>
+        <span class="k">if</span> <span class="n">usrIn</span> <span class="o">==</span> <span class="s">&#39;&#39;</span><span class="p">:</span>
+            <span class="k">continue</span>
+
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">())</span> <span class="o">!=</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">settings</span><span class="o">.</span><span class="n">PROP_SIZE</span><span class="p">[</span><span class="n">kind</span><span class="p">]):</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&quot;Input must be at least </span><span class="si">%d</span><span class="s"> words.&quot;</span>
+                                            <span class="o">%</span> <span class="p">(</span><span class="mi">1</span> <span class="o">+</span> <span class="n">settings</span><span class="o">.</span><span class="n">PROP_SIZE</span><span class="p">[</span><span class="n">kind</span><span class="p">]))</span>
+            <span class="k">continue</span>
+
+        <span class="c"># Good input</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">name</span> <span class="o">=</span> <span class="nb">str</span><span class="p">(</span><span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">0</span><span class="p">])</span>
+            <span class="n">components</span> <span class="o">=</span> <span class="p">[</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">usrIn</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="mi">1</span><span class="p">:]]</span>
+
+        <span class="c"># Looking for spaces in name and components</span>
+        <span class="n">spaces</span> <span class="o">=</span> <span class="s">&#39; &#39;</span> <span class="ow">in</span> <span class="n">name</span>  <span class="ow">or</span>  <span class="nb">any</span><span class="p">([</span><span class="s">&#39; &#39;</span> <span class="ow">in</span> <span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">components</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="n">spaces</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;No spaces in attribute name.&#39;</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="nb">all</span><span class="p">([(</span><span class="n">i</span> <span class="ow">in</span> <span class="n">col_mapping</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">components</span><span class="p">])</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;Components must exist in col_mapping.&#39;</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="nb">all</span><span class="p">([</span><span class="n">col_mapping</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="n">col_mapping</span><span class="p">[</span><span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]][</span><span class="s">&#39;dtype&#39;</span><span class="p">]]</span>
+                                        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">components</span> <span class="p">):</span>
+            <span class="n">dtype</span> <span class="o">=</span> <span class="n">col_mapping</span><span class="p">[</span><span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]][</span><span class="s">&#39;dtype&#39;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;dtype must be homogeneous.&#39;</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="k">if</span> <span class="nb">all</span><span class="p">([</span><span class="n">col_mapping</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;location&#39;</span><span class="p">]</span> <span class="o">==</span>
+                  <span class="n">col_mapping</span><span class="p">[</span><span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]][</span><span class="s">&#39;location&#39;</span><span class="p">]]</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">components</span><span class="p">):</span>
+            <span class="n">location</span> <span class="o">=</span> <span class="n">col_mapping</span><span class="p">[</span><span class="n">components</span><span class="p">[</span><span class="mi">0</span><span class="p">]][</span><span class="s">&#39;location&#39;</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">bad_input</span><span class="p">(</span><span class="s">&#39;Location of components must be homogeneous.&#39;</span><span class="p">)</span>
+            <span class="k">continue</span>
+
+        <span class="n">collection</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">dict</span><span class="p">(</span><span class="n">comps</span><span class="o">=</span><span class="n">components</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">dtype</span><span class="p">,</span>
+                                                  <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">components</span> <span class="o">==</span> <span class="p">{}:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;No </span><span class="si">%s</span><span class="s"> are specified.&#39;</span> <span class="o">%</span> <span class="n">kind</span><span class="p">)</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> are: &#39;</span> <span class="o">%</span> <span class="n">kind</span><span class="o">.</span><span class="n">title</span><span class="p">())</span>
+        <span class="k">for</span> <span class="n">k</span> <span class="ow">in</span> <span class="n">collection</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> --&gt; </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span>
+                                    <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">collection</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;comps&#39;</span><span class="p">],</span>
+                                        <span class="n">collection</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span>
+                                        <span class="n">collection</span><span class="p">[</span><span class="n">k</span><span class="p">][</span><span class="s">&#39;location&#39;</span><span class="p">]</span> <span class="p">)</span> <span class="p">)</span>
+
+    <span class="k">if</span> <span class="n">util</span><span class="o">.</span><span class="n">user_approve</span><span class="p">(</span><span class="s">&#39;Is this list of </span><span class="si">%s</span><span class="s"> correct?&#39;</span> <span class="o">%</span> <span class="n">kind</span> <span class="p">)</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">completion_msg</span><span class="p">(</span><span class="s">&#39;COMPLETED </span><span class="si">%s</span><span class="s"> IDENTIFICATION&#39;</span> <span class="o">%</span> <span class="n">kind</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">collection</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Returning to user input for </span><span class="si">%s</span><span class="s">.&#39;</span> <span class="o">%</span> <span class="n">kind</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">_identify_collections</span><span class="p">(</span><span class="n">col_mapping</span><span class="p">,</span> <span class="n">kind</span><span class="p">)</span>
+
+
+<div class="viewcode-block" id="vector_mapping"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.column_mapping.vector_mapping">[docs]</a><span class="k">def</span> <span class="nf">vector_mapping</span><span class="p">(</span><span class="n">col_mapping</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Identifies vector collections within existing scalar data.</span>
+
+<span class="sd">    Wrapper to :func:`_identify_collections`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_identify_collections</span><span class="p">(</span><span class="n">col_mapping</span><span class="p">,</span> <span class="s">&#39;vectors&#39;</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="tensor_mapping"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.column_mapping.tensor_mapping">[docs]</a><span class="k">def</span> <span class="nf">tensor_mapping</span><span class="p">(</span><span class="n">col_mapping</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Identifies tensor collections within existing scalar data.</span>
+
+<span class="sd">    Wrapper to :func:`_identify_collections`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_identify_collections</span><span class="p">(</span><span class="n">col_mapping</span><span class="p">,</span> <span class="s">&#39;tensors&#39;</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="symm_tensor_mapping"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.column_mapping.symm_tensor_mapping">[docs]</a><span class="k">def</span> <span class="nf">symm_tensor_mapping</span><span class="p">(</span><span class="n">col_mapping</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Identifies symmetric tensor collections within existing scalar data.</span>
+
+<span class="sd">    Wrapper to :func:`_identify_collections`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="n">_identify_collections</span><span class="p">(</span><span class="n">col_mapping</span><span class="p">,</span> <span class="s">&#39;symm_tensors&#39;</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="print_ordered_columns"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.column_mapping.print_ordered_columns">[docs]</a><span class="k">def</span> <span class="nf">print_ordered_columns</span><span class="p">(</span><span class="n">col_mapping</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Take a numbered ``col_mapping`` dictionary and print in ordered way,</span>
+<span class="sd">    based on column number.</span>
+
+<span class="sd">    Will fail if entries in ``col_mapping`` dict does not contain ``&#39;col&#39;``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    col_mapping : dict</span>
+<span class="sd">        Dictionary with column number, dtype and location stored under name.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># Sorting by column numbers.</span>
+    <span class="n">sorted_cols</span> <span class="o">=</span> <span class="p">[(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="k">for</span> <span class="p">(</span><span class="n">k</span><span class="p">,</span> <span class="n">v</span><span class="p">)</span> <span class="ow">in</span> <span class="n">col_mapping</span><span class="o">.</span><span class="n">items</span><span class="p">()]</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="n">sorted_cols</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="n">key</span><span class="o">=</span><span class="k">lambda</span> <span class="n">item</span><span class="p">:</span> <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s">&#39;col&#39;</span><span class="p">])</span>
+    <span class="k">except</span> <span class="ne">KeyError</span><span class="p">:</span>
+        <span class="c"># Catching case where col_mapping items do not have &#39;col&#39;</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Column mapping does not have column number.&#39;</span><span class="p">)</span>
+        <span class="k">return</span>
+
+    <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">sorted_cols</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> --&gt; </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s"> </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="n">item</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
+                                                 <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s">&#39;col&#39;</span><span class="p">],</span>
+                                                 <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">],</span>
+                                                 <span class="n">item</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="s">&#39;location&#39;</span><span class="p">]</span> <span class="p">)</span> <span class="p">)</span>
+
+
+<span class="c">#==============================================================================</span>
+
+</div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../readers.html" >mdhandle.readers</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

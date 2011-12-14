@@ -1,0 +1,394 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.properties.selection &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="up" title="mdhandle.properties" href="../properties.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../properties.html" accesskey="U">mdhandle.properties</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.properties.selection</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Enable the ability to easily create selections of a sub-set of atoms within</span>
+<span class="sd">LAMMPS output.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="kn">import</span> <span class="nn">mdhandle.vectors</span> <span class="kn">as</span> <span class="nn">vectors</span>
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+
+<span class="c"># TODO: Create abstract base class that doesn&#39;t do anything aside from store</span>
+<span class="c">#       mask, and temporal_lock.</span>
+<span class="c"># TODO: Boolean operations on selections.</span>
+<span class="c">#       - Need to accommodate selections with different temporal_lock</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="Selection"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.selection.Selection">[docs]</a><span class="k">class</span> <span class="nc">Selection</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Class used for selecting a subset of atoms from a snap.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    masking_function : callable</span>
+<span class="sd">        Callable taking :class:`mdhandle.snap.Snap` as input.</span>
+<span class="sd">        Must return a boolean :class:`numpy.ndarray` (Nx1).</span>
+
+<span class="sd">        Should take a single argument - the `Snap` object on which the</span>
+<span class="sd">        selection is applied.</span>
+<span class="sd">    temporal_lock : boolean, [default=True]</span>
+<span class="sd">        If ``True``, selection remains fixed once it is defined.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    temporal_lock : boolean</span>
+<span class="sd">        If ``True``, :attr:`Selection.masked` only defined once by first call.</span>
+<span class="sd">    masking_function : callable</span>
+<span class="sd">        Function used to define the selection.</span>
+<span class="sd">    masked : :class:`numpy.ndarray`</span>
+<span class="sd">        Result from mask operation.  Atoms with ``True`` entries are included.</span>
+<span class="sd">    first_time : boolean</span>
+<span class="sd">        If ``True``, :meth:`Selection.calculate_mask` has not been called.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">masking_function</span><span class="p">,</span> <span class="n">temporal_lock</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">temporal_lock</span> <span class="o">=</span> <span class="n">temporal_lock</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">masking_function</span> <span class="o">=</span> <span class="n">masking_function</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">masked</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">first_time</span> <span class="o">=</span> <span class="bp">True</span>
+
+<div class="viewcode-block" id="Selection.calculate_mask"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.selection.Selection.calculate_mask">[docs]</a>    <span class="k">def</span> <span class="nf">calculate_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Creates mask for selecting atoms.</span>
+
+<span class="sd">        Wrapper for masking_function with logic for controlling changes</span>
+<span class="sd">        via :attr:`Selection.temporal_lock`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">            Snap object for mask.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        self.masked : Boolean :class:`numpy.ndarray` (Nx1)</span>
+<span class="sd">            Atoms with true entries are included in the selection.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">first_time</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">masked</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">masking_function</span><span class="p">(</span><span class="n">snap</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">first_time</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">temporal_lock</span> <span class="ow">is</span> <span class="bp">False</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">masked</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">masking_function</span><span class="p">(</span><span class="n">snap</span><span class="p">)</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">masked</span>
+
+<span class="c"># ------------------- Selection Functions -------------------------------------</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">liquid_only</span><span class="p">(</span><span class="n">threshold</span><span class="p">,</span> <span class="n">fluid_atom_type</span><span class="p">,</span> <span class="n">coord_name</span><span class="o">=</span><span class="s">&#39;coord&#39;</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Selects liquid atoms using coordination number.</span>
+<span class="sd">    Liquid atoms have coordination numbers larger than the threshold.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    threshold : int</span>
+<span class="sd">        Lower threshold on coordination number for liquid.</span>
+<span class="sd">        Typical value: 40 for simulation with cutoff of :math:`4.0 \sigma`.</span>
+<span class="sd">    fluid_atom_type : iterable</span>
+<span class="sd">        Types of atoms which are fluids in the simulation.</span>
+<span class="sd">        Data type of entry should be `&#39;int&#39;`</span>
+<span class="sd">        If only a single atom type is desired: ``fluid_atom_type=[1,]``</span>
+<span class="sd">    coord_name : string, [default=&#39;coord&#39;]</span>
+<span class="sd">        Name of coordination number in snap.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    masking_function : callable</span>
+<span class="sd">        Function for selecting liquid atoms.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">fluid</span> <span class="o">=</span> <span class="n">fluid_only</span><span class="p">(</span><span class="n">fluid_atom_type</span><span class="p">)</span>
+
+    <span class="k">def</span> <span class="nf">masking_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="n">coord</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">coord_name</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">fluid</span><span class="p">(</span><span class="n">s</span><span class="p">)</span><span class="o">*</span><span class="p">(</span><span class="n">coord</span> <span class="o">&gt;</span> <span class="n">threshold</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">masking_function</span>
+
+
+<span class="k">def</span> <span class="nf">fluid_only</span><span class="p">(</span><span class="n">fluid_atom_types</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Function factory for selecting only fluid atoms.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    fluid_atom_type : iterable</span>
+<span class="sd">        Types of atoms which are fluids in the simulation.</span>
+<span class="sd">        Data type of entry should be ``&#39;int&#39;``</span>
+<span class="sd">        If only a single atom type is desired: ``fluid_atom_type=[1,]``</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    masking_function : callable</span>
+<span class="sd">        Function for selecting fluid atoms.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">masking_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">num_atoms</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">snap_type</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="s">&#39;type&#39;</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">fluid_atom_types</span><span class="p">:</span>
+            <span class="n">mask</span> <span class="o">*=</span> <span class="p">(</span><span class="n">snap_type</span> <span class="o">==</span> <span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
+
+        <span class="k">return</span> <span class="n">mask</span>
+
+    <span class="k">return</span> <span class="n">masking_function</span>
+
+
+<span class="k">def</span> <span class="nf">coordinate_less_than</span><span class="p">(</span><span class="n">coord_name</span><span class="p">,</span> <span class="n">threshold</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Function factory for selectino of atoms with coordinate</span>
+<span class="sd">    less than a given value.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coord_name : string, { &#39;x&#39; | &#39;y&#39; | &#39;z&#39;}</span>
+<span class="sd">        Name of coordinate to be tested.</span>
+<span class="sd">    threshold : float</span>
+<span class="sd">        Maximum value of coordinate</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    masking_function : callable</span>
+<span class="sd">        Function for selecting atoms with coordinates less than ``threshold``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">masking_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="n">coord_test</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">coord_name</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">coord_test</span> <span class="o">&lt;</span> <span class="n">threshold</span>
+
+    <span class="k">return</span> <span class="n">masking_function</span>
+
+
+<span class="k">def</span> <span class="nf">coordinate_greater_than</span><span class="p">(</span><span class="n">coord_name</span><span class="p">,</span> <span class="n">threshold</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Function factory for selection of atoms with coordinates</span>
+<span class="sd">    greater than a given value</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    coord_name : string, { &#39;x&#39; | &#39;y&#39; | &#39;z&#39;}</span>
+<span class="sd">        Name of coordinate to be tested.</span>
+<span class="sd">    threshold : float</span>
+<span class="sd">        Minimum value of coordinate</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    masking_function : callable</span>
+<span class="sd">        Function for selecting atoms with coordinates greater than</span>
+<span class="sd">        ``threshold``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">masking_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="n">coord_test</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">coord_name</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">coord_test</span> <span class="o">&gt;</span> <span class="n">threshold</span>
+
+    <span class="k">return</span> <span class="n">masking_function</span>
+
+
+<span class="k">def</span> <span class="nf">box</span><span class="p">(</span><span class="n">corner_low</span><span class="p">,</span> <span class="n">dimensions</span><span class="p">,</span> <span class="n">inside</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Function factory for selecting atoms in a box defined by low</span>
+<span class="sd">    corner anddimensions.</span>
+
+<span class="sd">    Box is aligned to coordinate directions.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    corner_low : :class:`numpy.ndarray`, (3x1)</span>
+<span class="sd">        Coordinates of the low corner of the box.</span>
+<span class="sd">    dimensions : :class:`numpy.ndarray`, (3x1)</span>
+<span class="sd">        Length of box in three coordinate directions.</span>
+<span class="sd">    inside : boolean, [default=True]</span>
+<span class="sd">        If ``True``, selects atoms inside the box.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    masking_function : callable</span>
+<span class="sd">        Function for selecting atoms with coordinates inside 3D box.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># TODO: Generalize to box that is not aligned to coordinate directions.</span>
+
+    <span class="n">corner_high</span> <span class="o">=</span> <span class="n">corner_low</span> <span class="o">+</span> <span class="n">dimensions</span>
+
+    <span class="k">def</span> <span class="nf">masking_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="n">xyz</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">get_vector</span><span class="p">((</span><span class="s">&#39;x&#39;</span><span class="p">,</span> <span class="s">&#39;y&#39;</span><span class="p">,</span> <span class="s">&#39;z&#39;</span><span class="p">),</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">xyz</span> <span class="o">&lt;</span> <span class="n">corner_high</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span><span class="o">*</span>\
+               <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">xyz</span> <span class="o">&gt;</span> <span class="n">corner_low</span><span class="p">,</span>  <span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">inside</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">mask</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">logical_not</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">masking_function</span>
+
+
+<span class="k">def</span> <span class="nf">sphere</span><span class="p">(</span><span class="n">centre</span><span class="p">,</span> <span class="n">radius</span><span class="p">,</span> <span class="n">inside</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Factory function for selection of atoms inside a</span>
+<span class="sd">    sphere defined by centre and radius.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    centre : :class:`numpy.ndarray`, (3x1)</span>
+<span class="sd">        Coordinates of the centre of the sphere.</span>
+<span class="sd">    radius : float</span>
+<span class="sd">        Radius of the sphere.</span>
+<span class="sd">    inside : boolean, [default=True]</span>
+<span class="sd">        If ``True``, selects atoms inside the sphere.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    masking_function : callable</span>
+<span class="sd">        Function for selecting atoms with coordinates inside 3D sphere.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">masking_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="n">xyz</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">get_vector</span><span class="p">((</span><span class="s">&#39;x&#39;</span><span class="p">,</span> <span class="s">&#39;y&#39;</span><span class="p">,</span> <span class="s">&#39;z&#39;</span><span class="p">),</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">vectors</span><span class="o">.</span><span class="n">sq_magnitude</span><span class="p">(</span><span class="n">xyz</span><span class="o">-</span><span class="n">centre</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">radius</span><span class="o">**</span><span class="mi">2</span>
+        <span class="k">if</span> <span class="n">inside</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">mask</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">logical_not</span><span class="p">(</span><span class="n">mask</span><span class="p">)</span>
+
+    <span class="k">return</span> <span class="n">masking_function</span>
+
+
+<span class="k">def</span> <span class="nf">opposite_selection</span><span class="p">(</span><span class="n">filter_function_input</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Factory function inverting existing selection mask.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    filter_function_input : callable</span>
+<span class="sd">        Existing selection function.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    reversed_filter_function : callable</span>
+<span class="sd">        Inverted ``filter_function_input``.</span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">reversed_filter_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">logical_not</span><span class="p">(</span><span class="n">filter_function_input</span><span class="p">(</span><span class="n">s</span><span class="p">))</span>
+
+    <span class="k">return</span> <span class="n">reversed_filter_function</span>
+
+
+<span class="c"># =============================================================================</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../properties.html" >mdhandle.properties</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

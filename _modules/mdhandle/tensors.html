@@ -1,0 +1,259 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.tensors &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.tensors</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Provides utility functions for manipulating tensor collections. In this</span>
+<span class="sd">context, tensor collections are (Nx6) or (Nx9) :class:`numpy.arrays` where each row is a tensor associated with an individual atom.</span>
+
+<span class="sd">The order of components in a 6-component symmmetric tensors is:</span>
+<span class="sd">    ``00, 01, 02, 11, 12, 22``</span>
+
+<span class="sd">    ``xx, xy, xz, yy, yz, zz``</span>
+
+<span class="sd">The order of components in a 9-component general tensor is:</span>
+<span class="sd">    ``00, 01, 02, 10, 11, 12, 20 21, 22``</span>
+
+<span class="sd">    ``xx, xy, xz, yx, yy, yz, zx, zy, zz``</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c"># TODO: Vectors along surfaces</span>
+<span class="c"># TODO: Principle directions, eigenvalues (invariants)</span>
+<span class="c"># TODO: Consider refactoring so that each atomwise item a 2D matrix object</span>
+<span class="c">#       rather than a row vector.</span>
+
+<span class="c">#------------------------------------------------------------------------------</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+
+<span class="c">#------------------------------------------------------------------------------</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+
+<span class="c">#------------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="grow"><a class="viewcode-back" href="../../reference.html#mdhandle.tensors.grow">[docs]</a><span class="k">def</span> <span class="nf">grow</span><span class="p">(</span><span class="n">cont_tens</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns a tensor collection grown from input list/tuple, or comma separated</span>
+<span class="sd">    list of existing vector collections.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    cont_tens : iterable of :class:`numpy.ndarray`, (Nx6 or Nx9)</span>
+<span class="sd">        List or tuple of tensor collections to be stacked.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    grown : :class:`numpy.ndarray`, ((N1 + N2 + ...)x6) or ((N1 + N2 + ...)x9)</span>
+<span class="sd">        Returns new tensor collection.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    ---------</span>
+<span class="sd">    :meth:`mdhandle.vectors.grow` for related example.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">cont_tens</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="k">if</span> <span class="n">i</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="p">(</span><span class="n">i</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">6</span><span class="p">,)</span> <span class="ow">or</span> <span class="n">i</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="p">(</span><span class="mi">9</span><span class="p">,))</span>
+        <span class="k">elif</span> <span class="n">i</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="p">(</span><span class="n">i</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">6</span> <span class="ow">or</span> <span class="n">i</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="mi">9</span><span class="p">)</span>
+    <span class="n">grown</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vstack</span><span class="p">(</span><span class="nb">tuple</span><span class="p">(</span><span class="n">cont_tens</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">grown</span>
+
+</div>
+<div class="viewcode-block" id="build_from_scalars"><a class="viewcode-back" href="../../reference.html#mdhandle.tensors.build_from_scalars">[docs]</a><span class="k">def</span> <span class="nf">build_from_scalars</span><span class="p">(</span><span class="n">cont_tens</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Returns a tensor collection ((Nx6) or (Nx9) :class:`numpy.ndarray`) </span>
+<span class="sd">    from its scalar components ((Nx1) :class:`numpy.ndarray`).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    cont_vecs : iterable of :class:`numpy.ndarray`, (Nx1)</span>
+<span class="sd">        Collection of constituent scalars: ``(t0, t1, t2, t3, t4, t5, ...)``.</span>
+<span class="sd">        Each scalar contains atomwise scalar.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    new_tens : :class:`numpy.ndarray`, (Nx6) or (Nx9)</span>
+<span class="sd">        Returns tensor collection in the form</span>
+<span class="sd">        ``numpy.array([t0, t1, t2, t3, t4, t5, ... ])``.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    ---------</span>
+<span class="sd">    :meth:`mdhandle.vectors.build_from_scalars` for related example.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">assert</span> <span class="p">(</span><span class="nb">len</span><span class="p">(</span><span class="n">cont_tens</span><span class="p">)</span> <span class="o">==</span> <span class="mi">6</span> <span class="ow">or</span> <span class="nb">len</span><span class="p">(</span><span class="n">cont_tens</span><span class="p">)</span> <span class="o">==</span> <span class="mi">9</span><span class="p">)</span>
+
+    <span class="n">shape_test</span> <span class="o">=</span> <span class="n">cont_tens</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span>
+    <span class="k">for</span> <span class="n">t_item</span> <span class="ow">in</span> <span class="n">cont_tens</span><span class="p">:</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">t_item</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="c"># ASSERT: All scalar components are the same length</span>
+        <span class="k">assert</span> <span class="n">t_item</span><span class="o">.</span><span class="n">shape</span> <span class="o">==</span> <span class="n">shape_test</span>
+
+    <span class="n">new_tens</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">column_stack</span><span class="p">(</span><span class="n">cont_tens</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">new_tens</span>
+
+</div>
+<div class="viewcode-block" id="is_symmetric"><a class="viewcode-back" href="../../reference.html#mdhandle.tensors.is_symmetric">[docs]</a><span class="k">def</span> <span class="nf">is_symmetric</span><span class="p">(</span><span class="n">tens</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Tests for the symmetry of the supplied tensor.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    tens : ``numpy.ndarray``   (Nx6 or Nx9)</span>
+<span class="sd">        Tensor collection.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    return_value : boolean</span>
+<span class="sd">        If ``True``, ``tens`` is symmetric.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">return_value</span> <span class="o">=</span> <span class="bp">False</span>
+    
+    <span class="k">if</span> <span class="n">tens</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">tens</span><span class="p">)</span> <span class="o">==</span> <span class="mi">6</span><span class="p">:</span>
+            <span class="n">return_value</span> <span class="o">=</span>  <span class="bp">True</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">tens</span><span class="p">)</span> <span class="o">==</span> <span class="mi">9</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">((</span><span class="n">tens</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">==</span> <span class="n">tens</span><span class="p">[</span><span class="mi">3</span><span class="p">])</span> <span class="ow">and</span> <span class="p">(</span><span class="n">tens</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">==</span> <span class="n">tens</span><span class="p">[</span><span class="mi">6</span><span class="p">])</span>
+                    <span class="ow">and</span> <span class="p">(</span><span class="n">tens</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span> <span class="o">==</span> <span class="n">tens</span><span class="p">[</span><span class="mi">7</span><span class="p">])):</span>
+                <span class="n">return_value</span> <span class="o">=</span> <span class="bp">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">return_value</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Tensor is improper shape: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">tens</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">return_value</span> <span class="o">=</span> <span class="bp">False</span>
+
+    <span class="k">elif</span> <span class="n">tens</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+        <span class="k">if</span> <span class="n">tens</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">,:]</span> <span class="o">==</span> <span class="mi">6</span><span class="p">:</span>
+            <span class="c"># 6-component tensor collections are symmetry by default.</span>
+            <span class="n">return_value</span> <span class="o">=</span> <span class="bp">True</span>
+        <span class="k">elif</span> <span class="n">tens</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">,:]</span> <span class="o">==</span> <span class="mi">9</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">tens</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">tens</span><span class="p">[:,</span><span class="mi">3</span><span class="p">])</span>
+                            <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">tens</span><span class="p">[:,</span><span class="mi">2</span><span class="p">],</span> <span class="n">tens</span><span class="p">[:,</span><span class="mi">6</span><span class="p">])</span>
+                            <span class="ow">and</span> <span class="n">np</span><span class="o">.</span><span class="n">allclose</span><span class="p">(</span><span class="n">tens</span><span class="p">[:,</span><span class="mi">5</span><span class="p">],</span> <span class="n">tens</span><span class="p">[:,</span><span class="mi">7</span><span class="p">])</span> <span class="p">):</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;9-component tensor is symmetric.&#39;</span><span class="p">)</span>
+                <span class="n">return_value</span> <span class="o">=</span> <span class="bp">True</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">return_value</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Tensor is improper shape. Shape: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">tens</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="n">return_value</span> <span class="o">=</span> <span class="bp">False</span>
+    <span class="k">else</span><span class="p">:</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">user</span><span class="p">(</span><span class="s">&#39;Tensor is &gt;2 dimensional array. Dims: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">tens</span><span class="o">.</span><span class="n">ndim</span><span class="p">)</span>
+        <span class="n">return_value</span> <span class="o">=</span> <span class="bp">False</span>
+    
+    <span class="k">return</span> <span class="n">return_value</span>
+
+
+<span class="c">#=============================================================================</span>
+
+</div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

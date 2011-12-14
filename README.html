@@ -1,0 +1,242 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle - README - v0.9 &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="index.html" />
+    <link rel="next" title="Tutorial" href="tutorial.html" />
+    <link rel="prev" title="Welcome to mdhandle’s documentation!" href="index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="tutorial.html" title="Tutorial"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to mdhandle’s documentation!"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">mdhandle v0.9a documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="mdhandle-readme-v0-9">
+<h1><tt class="docutils literal"><span class="pre">mdhandle</span></tt> - README - v0.9<a class="headerlink" href="#mdhandle-readme-v0-9" title="Permalink to this headline">¶</a></h1>
+<div class="section" id="introduction">
+<h2>Introduction<a class="headerlink" href="#introduction" title="Permalink to this headline">¶</a></h2>
+<p><tt class="xref py py-mod docutils literal"><span class="pre">mdhandle</span></tt> is a post-processing framework for molecular dynamics
+simulation, particularly fluid mechanics, materials science and other
+non-macromolecule simulation.</p>
+<p>Currently, <tt class="xref py py-mod docutils literal"><span class="pre">mdhandle</span></tt> is focused on interacting with result produced by the
+LAMMPS (<a class="reference external" href="http://lammps.sandia.gov">http://lammps.sandia.gov</a>) software package, but could be extended to
+handle the results from other software packages.</p>
+</div>
+<div class="section" id="system-requirements">
+<h2>System Requirements<a class="headerlink" href="#system-requirements" title="Permalink to this headline">¶</a></h2>
+<ol class="arabic simple">
+<li><strong>Linux</strong>:</li>
+</ol>
+<ul>
+<li><p class="first">Requires <tt class="docutils literal"><span class="pre">Python</span> <span class="pre">2.6</span></tt> or higher in the <tt class="docutils literal"><span class="pre">2.x</span></tt> series. Not compatible with <tt class="docutils literal"><span class="pre">Python</span> <span class="pre">3.x</span></tt> due to dependancy with <tt class="docutils literal"><span class="pre">NumPy</span></tt>.</p>
+</li>
+<li><dl class="first docutils">
+<dt><tt class="docutils literal"><span class="pre">Python</span></tt> package dependencies:</dt>
+<dd><ul class="first last simple">
+<li><tt class="docutils literal"><span class="pre">NumPy</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">SciPy</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">matplotlib</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">PyTables</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">IPython</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">sphinx</span></tt> and <tt class="docutils literal"><span class="pre">numpydoc</span></tt> for documentation.</li>
+<li>Python dependancies are downloaded automatically during install
+by <tt class="docutils literal"><span class="pre">easy_install</span></tt> or <tt class="docutils literal"><span class="pre">pip</span></tt>.</li>
+</ul>
+</dd>
+</dl>
+</li>
+</ul>
+<ol class="arabic simple" start="2">
+<li><strong>OS X</strong>:  See Linux.</li>
+<li><strong>Windows</strong>: Windows support is unknown.  As shipped, <tt class="xref py py-mod docutils literal"><span class="pre">mdhandle</span></tt> is developed for POSIX systems and may operate using the <tt class="docutils literal"><span class="pre">cygwin</span></tt> environment.</li>
+</ol>
+</div>
+<div class="section" id="install">
+<h2>Install<a class="headerlink" href="#install" title="Permalink to this headline">¶</a></h2>
+<p>To install <tt class="xref py py-mod docutils literal"><span class="pre">mdhandle</span></tt>, run</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">python</span> <span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">install</span>
+</pre></div>
+</div>
+<p>This command will install Python modules, and build the LAMMPS library
+extension.  It is advisable to install the module rather than using it in place within the source tree.  To avoid polluting the system <tt class="docutils literal"><span class="pre">site-packages</span></tt> directory, <tt class="docutils literal"><span class="pre">virtualenv</span></tt> should be used.</p>
+<p>Source and binary distributions can also be created by</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">python</span> <span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">sdist</span>
+</pre></div>
+</div>
+<p>or</p>
+<div class="highlight-python"><div class="highlight"><pre><span class="gp">&gt;&gt;&gt; </span><span class="n">python</span> <span class="n">setup</span><span class="o">.</span><span class="n">py</span> <span class="n">bdist</span>
+</pre></div>
+</div>
+<div class="section" id="configuration">
+<h3>Configuration<a class="headerlink" href="#configuration" title="Permalink to this headline">¶</a></h3>
+<p>Systemwide settings are contained within <a class="reference internal" href="reference.html#module-mdhandle.settings" title="mdhandle.settings"><tt class="xref py py-mod docutils literal"><span class="pre">mdhandle.settings</span></tt></a>.  They can
+be modified within the file, or at runtime during program/script execution.</p>
+</div>
+</div>
+<div class="section" id="scripts">
+<h2>Scripts<a class="headerlink" href="#scripts" title="Permalink to this headline">¶</a></h2>
+<p>Example scripts can be found in the <tt class="docutils literal"><span class="pre">bin</span></tt> directory, which is installed along with the <tt class="xref py py-mod docutils literal"><span class="pre">mdhandle</span></tt> module by the <tt class="docutils literal"><span class="pre">python</span> <span class="pre">setup.py</span> <span class="pre">install</span></tt>.</p>
+<p>Additional scripts can be found at
+<a class="reference external" href="http://github.com/dtlussier/mdhandle_more_scripts">http://github.com/dtlussier/mdhandle_more_scripts</a></p>
+</div>
+<div class="section" id="documentation">
+<h2>Documentation<a class="headerlink" href="#documentation" title="Permalink to this headline">¶</a></h2>
+<p>After installation is complete, documentation can be found within the <tt class="docutils literal"><span class="pre">doc</span></tt> folder.</p>
+<p>Sphinx (<a class="reference external" href="http://sphinx.pocoo.org/">http://sphinx.pocoo.org/</a>) is required to build the documentation
+via:</p>
+<div class="highlight-python"><pre>% cd doc
+% make html</pre>
+</div>
+<p>The resulting docs are then at <tt class="docutils literal"><span class="pre">doc/_build/html/index.html</span></tt>.  Other available
+build formats can be seen by invoking:</p>
+<div class="highlight-python"><pre>% cd doc
+% make</pre>
+</div>
+<p>Building the documentation at the local level reflects any changes made at the
+local level.  <tt class="xref py py-mod docutils literal"><span class="pre">mdhandle</span></tt> must be in your <tt class="docutils literal"><span class="pre">PYTHONPATH</span></tt> to build docs using <tt class="docutils literal"><span class="pre">sphinx</span></tt>.</p>
+<p>A persistent version of the documentation reflecting the
+github version is at <a class="reference external" href="http://github.com/dtlussier/mdhandle">http://github.com/dtlussier/mdhandle</a>.</p>
+</div>
+<div class="section" id="authors">
+<h2>Authors<a class="headerlink" href="#authors" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li>Dan Lussier, Fluidics and Biocomplexity Group, Oxford University
+(<a class="reference external" href="mailto:dtlussier&#37;&#52;&#48;gmail&#46;com">dtlussier<span>&#64;</span>gmail<span>&#46;</span>com</a>, <a class="reference external" href="http://github.com/dtlussier">http://github.com/dtlussier</a>)</li>
+</ul>
+</div>
+<div class="section" id="acknowledgements">
+<h2>Acknowledgements<a class="headerlink" href="#acknowledgements" title="Permalink to this headline">¶</a></h2>
+<p><strong>Related Packages</strong>:</p>
+<ul class="simple">
+<li><tt class="docutils literal"><span class="pre">MMTK</span></tt>, <a class="reference external" href="http://dirac.cnrs-orleans.fr/MMTK/">http://dirac.cnrs-orleans.fr/MMTK/</a></li>
+<li><tt class="docutils literal"><span class="pre">MD-Tracks</span></tt>, <a class="reference external" href="http://molmod.ugent.be/code/wiki/MD-Tracks">http://molmod.ugent.be/code/wiki/MD-Tracks</a></li>
+<li><tt class="docutils literal"><span class="pre">mdanalysis</span></tt>, <a class="reference external" href="http://code.google.com/p/mdanalysis/">http://code.google.com/p/mdanalysis/</a></li>
+<li><tt class="docutils literal"><span class="pre">Pizza</span></tt>, <a class="reference external" href="http://www.sandia.gov/~sjplimp/pizza.html">http://www.sandia.gov/~sjplimp/pizza.html</a></li>
+</ul>
+<p><strong>Thanks</strong>:</p>
+<ul class="simple">
+<li>Yiannis Ventikos, Fluidics and Biocomplexity Group, Oxford University</li>
+</ul>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#"><tt class="docutils literal"><span class="pre">mdhandle</span></tt> - README - v0.9</a><ul>
+<li><a class="reference internal" href="#introduction">Introduction</a></li>
+<li><a class="reference internal" href="#system-requirements">System Requirements</a></li>
+<li><a class="reference internal" href="#install">Install</a><ul>
+<li><a class="reference internal" href="#configuration">Configuration</a></li>
+</ul>
+</li>
+<li><a class="reference internal" href="#scripts">Scripts</a></li>
+<li><a class="reference internal" href="#documentation">Documentation</a></li>
+<li><a class="reference internal" href="#authors">Authors</a></li>
+<li><a class="reference internal" href="#acknowledgements">Acknowledgements</a></li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="index.html"
+                        title="previous chapter">Welcome to mdhandle&#8217;s documentation!</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="tutorial.html"
+                        title="next chapter">Tutorial</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/README.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="tutorial.html" title="Tutorial"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="index.html" title="Welcome to mdhandle’s documentation!"
+             >previous</a> |</li>
+        <li><a href="index.html">mdhandle v0.9a documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

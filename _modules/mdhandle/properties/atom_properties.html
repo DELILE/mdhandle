@@ -1,0 +1,1018 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.properties.atom_properties &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="up" title="mdhandle.properties" href="../properties.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../properties.html" accesskey="U">mdhandle.properties</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.properties.atom_properties</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Calculates atomwise properties based on existing simulation results.</span>
+
+<span class="sd">Returns atom-wise results for property calculation</span>
+
+<span class="sd">**Credits**:</span>
+
+<span class="sd">* Inspiration for virial and stress calc from LAMMPS source.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">abc</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">units</span>
+<span class="kn">from</span> <span class="nn">mdhandle.lammps</span> <span class="kn">import</span> <span class="n">lammps</span>
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">import</span> <span class="nn">mdhandle.vectors</span> <span class="kn">as</span> <span class="nn">vectors</span>
+<span class="kn">import</span> <span class="nn">mdhandle.properties.cell_decomposition</span> <span class="kn">as</span> <span class="nn">cell_decomposition</span>
+<span class="kn">from</span> <span class="nn">mdhandle.settings</span> <span class="kn">import</span> <span class="n">PROP_SIZE</span><span class="p">,</span> <span class="n">DTYPES</span>
+
+<span class="c"># TODO: Change AtomCalc.add_new_calc(...) so not manually monkeypatching</span>
+<span class="c">#       new calculation implemenation.</span>
+<span class="c"># TODO: Add additional class like NonLocal to handle other unit types</span>
+<span class="c">#       - or add unit factors like in mdhandle.properties.snap_properties</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="AtomCalc"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.AtomCalc">[docs]</a><span class="k">class</span> <span class="nc">AtomCalc</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Abstract base class for atomwise calculations.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Snap object to be processed.</span>
+<span class="sd">    calcs : iterable</span>
+<span class="sd">        List of calculations to perform.</span>
+<span class="sd">        Each sub-class must supply its own calculation functions which</span>
+<span class="sd">        are run either directly,  or via the :meth:`run` method.</span>
+
+<span class="sd">        The list of available calculations is in ``_all_calcs``.</span>
+<span class="sd">        If ``calcs is None``, all implemented calculations are done.</span>
+<span class="sd">        [default=None]</span>
+<span class="sd">    wrap : boolean</span>
+<span class="sd">        If ``True``, atom coordinates are wrapped back to primary</span>
+<span class="sd">        simulation domain, subject to PBC.</span>
+<span class="sd">        [default=True]</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Must be ``&#39;atoms&#39;`` dataset.</span>
+<span class="sd">    xyz : :class:`numpy.ndarray` </span>
+<span class="sd">        Atomwise positions within :attr:`AtomCalc.snap`.</span>
+<span class="sd">    scalars : dict</span>
+<span class="sd">        Dictionary of scalars and associated metadata produced by calculations.</span>
+<span class="sd">    vectors : dict</span>
+<span class="sd">        Dictionary of vectors and associated metadata produced by calculations.</span>
+<span class="sd">    symm_tensors : dict</span>
+<span class="sd">        Dictionary of symmetric tensors and associated metadata </span>
+<span class="sd">        produced by calculations.</span>
+<span class="sd">    tensors : dict</span>
+<span class="sd">        Dictionary of tensors and associated metadata produced by calculations.</span>
+<span class="sd">    calcs : dict</span>
+<span class="sd">        Stores input for calculations to run.  Stages calculation names until</span>
+<span class="sd">        processed by``setup_calculations()``.</span>
+<span class="sd">    to_calc : dict</span>
+<span class="sd">        Dictionary of calculations performed by :meth:`AtomCalc:run`.</span>
+<span class="sd">    results : dict</span>
+<span class="sd">        Dictionary used for storing result of calculations by name.</span>
+
+<span class="sd">    _all_calcs : dict </span>
+<span class="sd">        Dictionary sotring metadata of all implemented calculations.</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    --------</span>
+<span class="sd">    add_new_calc(name, dtype=&#39;float&#39;, collection_type=&#39;scalars&#39;)</span>
+<span class="sd">        Adds metadata for new calculation.</span>
+<span class="sd">        Calculation function itself must be monkey patched into</span>
+<span class="sd">        :class:`AtomCalc` and have a name in style ``_calc_NAME()``</span>
+<span class="sd">    setup_calculations()</span>
+<span class="sd">        Runs configurations required before calling :meth:`AtomCalc.run`.</span>
+<span class="sd">    run()</span>
+<span class="sd">        Runs all calculations stored in :attr:`AtomCalc.to_calc`.</span>
+<span class="sd">        Must be overridden in sub-classes of :class:`AtomCalc`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">__metaclass__</span> <span class="o">=</span> <span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">wrap</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span> <span class="o">=</span> <span class="n">snap</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="s">&#39;atoms&#39;</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&quot;Snap dataset type must be &#39;atoms&#39; not </span><span class="si">%s</span><span class="s">&quot;</span>
+                                                    <span class="o">%</span> <span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">xyz</span> <span class="o">=</span> <span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">(</span><span class="n">snap</span><span class="o">.</span><span class="n">vectors</span><span class="p">[</span><span class="s">&#39;xyz&#39;</span><span class="p">][</span><span class="s">&#39;comps&#39;</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="n">wrap</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">xyz</span> <span class="o">=</span> <span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">wrap_to_central</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xyz</span><span class="p">)</span>
+
+        <span class="c"># Implemented calculations are added via add_new_calc()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span> <span class="o">=</span> <span class="n">calcs</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">scalars</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vectors</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span> <span class="o">=</span> <span class="p">{}</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">types</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtype</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="p">{}</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c"># setup_calculations(...) not called in __init__ for AtomCalc</span>
+        <span class="c"># because relies on subclass implementation</span>
+
+<div class="viewcode-block" id="AtomCalc.add_new_calc"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.AtomCalc.add_new_calc">[docs]</a>    <span class="k">def</span> <span class="nf">add_new_calc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;scalars&#39;</span><span class="p">,</span>
+                                                <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds information about the output of a new calculation type beyond the</span>
+<span class="sd">        default set.</span>
+
+<span class="sd">        Implementation of new calculation is done by manually monkeypatching</span>
+<span class="sd">        function with name in style &quot;_calc_NAME&quot; into existing object.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of new calculation.</span>
+<span class="sd">        dtype : string, {&#39;int&#39; | &#39;float&#39;}, [default=&#39;float&#39;]</span>
+<span class="sd">            Data type for calculation.</span>
+<span class="sd">        collection_type : string, [default=&#39;scalars&#39;]</span>
+<span class="sd">            Defines the shape of the output (i.e. vectors: Nx3)</span>
+<span class="sd">            {&#39;scalars&#39; | &#39;vectors&#39; | &#39;tensors&#39; | &#39;symm_tensors&#39;}</span>
+<span class="sd">        location : string, [default=&#39;Node&#39;]</span>
+<span class="sd">            For atomwise properties as calculated by subclasses of</span>
+<span class="sd">            :class:`AtomCalc`, only `&#39;Node&#39;` is relevant.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">collection_type</span> <span class="o">=</span> <span class="n">collection_type</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">DTYPES</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&quot;dtype must be &#39;int&#39; or &#39;float&#39;, </span><span class="si">%s</span><span class="s"> given&quot;</span> <span class="o">%</span> <span class="n">dtype</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">collection_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">PROP_SIZE</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&quot;collection_type </span><span class="si">%s</span><span class="s"> does not exist.&quot;</span>
+                                                            <span class="o">%</span> <span class="n">collection_type</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">location</span> <span class="o">!=</span> <span class="s">&#39;Node&#39;</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&quot;Location must be set to &#39;Node&#39;&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;dtype&#39;</span><span class="p">:</span> <span class="n">dtype</span><span class="p">,</span> <span class="s">&#39;location&#39;</span><span class="p">:</span> <span class="n">location</span><span class="p">,</span>
+                                  <span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="n">collection_type</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup_calculations</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="AtomCalc.setup_calculations"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.AtomCalc.setup_calculations">[docs]</a>    <span class="k">def</span> <span class="nf">setup_calculations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Perform initialization necessary for running calculations.</span>
+
+<span class="sd">        Must also be called if any additional new calculations are</span>
+<span class="sd">        added at runtime.</span>
+
+<span class="sd">        Warning: New results dict is created each time this method is called.</span>
+<span class="sd">        Information from any previous runs is lost.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Logic for default calcs == None --&gt; selecting all possible calcs</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">]</span>
+            <span class="n">to_loop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">to_loop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span>
+
+        <span class="c"># Assining items to be calculated.</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">to_loop</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;scalars&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">scalars</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;vectors&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">vectors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;tensors&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;symm_tensors&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+        <span class="c"># Human readable.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtypes</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dtypes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">]</span>
+
+        <span class="c"># Human readable.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;location&#39;</span><span class="p">]</span>
+
+        <span class="c"># Human readable.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">types</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">types</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;type&#39;</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+</div>
+    <span class="nd">@abc.abstractmethod</span>
+<div class="viewcode-block" id="AtomCalc.run"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.AtomCalc.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Abstract method for running all calculations in </span>
+<span class="sd">        :attr:`AtomCalc.to_calc`.</span>
+<span class="sd">        </span>
+<span class="sd">        Must be overridden in sub-classes.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+
+
+<span class="c"># TODO: Add ability to handle systems w more than one cutoff.</span>
+<span class="c"># TODO: Outer product method for getting virial and stress tensor.</span></div></div>
+<div class="viewcode-block" id="NonLocal"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocal">[docs]</a><span class="k">class</span> <span class="nc">NonLocal</span><span class="p">(</span><span class="n">AtomCalc</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Class for calculating atomwise properties which are dependent on infomation</span>
+<span class="sd">    gatherered from all atoms within the snap.</span>
+<span class="sd">    (e.g. potential energy, coordination number.)</span>
+
+<span class="sd">    Calculation of interatomic distance (``NonLocal._calc_diff``) assumes</span>
+<span class="sd">    local effect so that uses only nearest neighbours.  The resulting</span>
+<span class="sd">    interatomic distance is limited to the cutoff radius and is modified</span>
+<span class="sd">    to conform with the minimum image convention.</span>
+
+<span class="sd">    Due to high cost of calculations - should only be run using ``run()``</span>
+<span class="sd">    rather than directly calling individual calculation functions</span>
+<span class="sd">    (e.g. ``_calc_epair()``)</span>
+
+<span class="sd">    .. note::</span>
+<span class="sd">       Interatomic interaction is calculated using 12-6 Lennard-Jones</span>
+<span class="sd">       potential and therefore must have units style &#39;lj&#39; (non-dimensional</span>
+<span class="sd">       Lennard-Jones units.).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Snap object to be processed.  Must have units style, &#39;lj&#39;</span>
+<span class="sd">    cutoff : float</span>
+<span class="sd">        Cutoff radius for interatomic interaction.</span>
+<span class="sd">    calcs : iterable, [default=None]</span>
+<span class="sd">        List of calculations to perform.</span>
+
+<span class="sd">        Implemented calculations available:</span>
+<span class="sd">        ``[&#39;coord&#39;, &#39;epair&#39;, &#39;virial&#39;, &#39;force&#39;, &#39;stress&#39;]``.</span>
+
+<span class="sd">        If ``calcs is None``, all implemented calculations are done.</span>
+
+<span class="sd">    wrap : boolean, [default=True]</span>
+<span class="sd">        If ``True``, atom coordinates are wrapped back to primary</span>
+<span class="sd">        simulation domain, subject to PBC.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ------------</span>
+<span class="sd">    cutoff : float </span>
+<span class="sd">        Cutoff for LJ 12-6 interatomic interaction.</span>
+<span class="sd">    binning : :class:`mdhandle.properties.cell_decomposition.SparseBinning`</span>
+<span class="sd">        Cell decomposition of atoms for efficient interaction calculation.</span>
+<span class="sd">    results : dict</span>
+<span class="sd">        All results from calculations in :attr:`NonLocal.to_calc`</span>
+<span class="sd">        are stored in `dict` organized by name.  Results also stored in</span>
+<span class="sd">        attributes of :class:`NonLocal`.</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    --------</span>
+<span class="sd">    setup_calculations()</span>
+<span class="sd">        Runs configuration to setup for calculation.</span>
+<span class="sd">    run()</span>
+<span class="sd">        Runs all calculations in :attr:`NonLocal.to_calc`.</span>
+<span class="sd">    _calc_epair(atom_id, diff, diff_mag, any_there)</span>
+<span class="sd">        Calculates interatomic potential energy via LJ 12-6.</span>
+<span class="sd">    _calc_diff(atom_id, diff, diff_mag, any_there)</span>
+<span class="sd">        Calculates the distance (vector and magnitude) to an atom.</span>
+<span class="sd">    _calc_coord(atom_id, diff, diff_mag, any_there)</span>
+<span class="sd">        Calculates coordination number up to ``cutoff``.</span>
+<span class="sd">    _calc_force(atom_id, diff, diff_mag, any_there)</span>
+<span class="sd">        Calculates total interatomic force on an atom via LJ 12-6.</span>
+<span class="sd">    _calc_virial(atom_id, diff, diff_mag, any_there)</span>
+<span class="sd">        Calculates virial on an atom via LJ 12-6.</span>
+<span class="sd">    _calc_stress(atom_id, diff, diff_mag, any_there)</span>
+<span class="sd">        Calculates atomwise stress tensor for an atom via LJ 12-6.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">,</span> <span class="n">calcs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">wrap</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">NonLocal</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="p">,</span> <span class="n">wrap</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="s">&#39;lj&#39;</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&quot;Units must be &#39;lj&#39; for NonLocal, currently: </span><span class="si">%s</span><span class="s">&quot;</span>
+                                                     <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="n">cutoff</span>
+
+        <span class="c"># Uses cell decomposition to speed up calculation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">binning</span> <span class="o">=</span> <span class="n">cell_decomposition</span><span class="o">.</span><span class="n">SparseBinning</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="p">,</span>
+                                        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">))</span>
+
+        <span class="c"># Default set of calculations for NonLocal</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;coord&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;int&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;epair&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;virial&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;symm_tensors&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;force&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;vectors&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;stress&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;symm_tensors&#39;</span><span class="p">)</span>
+
+        <span class="c"># Must be run before proceeding with run()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup_calculations</span><span class="p">()</span>
+
+<div class="viewcode-block" id="NonLocal.setup_calculations"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocal.setup_calculations">[docs]</a>    <span class="k">def</span> <span class="nf">setup_calculations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Perform initialization necessary for running calculations.</span>
+
+<span class="sd">        Must also be called if any additional new calculations are</span>
+<span class="sd">        added at runtime.</span>
+
+<span class="sd">        .. warning::</span>
+<span class="sd">           New results arrays are created each time this method is called.</span>
+<span class="sd">           Information from any previous runs is lost.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">NonLocal</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">setup_calculations</span><span class="p">()</span>
+
+        <span class="c"># Different than other AtomCalc subclasses because</span>
+        <span class="c"># cannot calculate vectorially so need destination arrays</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">(</span>
+                                <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">xyz</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">PROP_SIZE</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">types</span><span class="p">[</span><span class="n">i</span><span class="p">]]),</span>
+                                <span class="n">dtype</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">dtypes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+                                      <span class="p">)</span>
+</div>
+<div class="viewcode-block" id="NonLocal._calc_epair"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocal._calc_epair">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_epair</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atom_id</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">diff_mag</span><span class="p">,</span> <span class="n">any_there</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculate the kinetic energy of atom atom_id.</span>
+
+<span class="sd">        Implementation is limited to monotomic system.  Additional terms</span>
+<span class="sd">        needed for bonded contributions.</span>
+
+<span class="sd">        Also not applicable to long-range forces (e.g. electrostatics), which</span>
+<span class="sd">        cannot be calculated by direct summation under the minimum image</span>
+<span class="sd">        convention.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        atom_id : int</span>
+<span class="sd">            Atom index in snap.</span>
+<span class="sd">        diff : :class:`numpy.ndarray` (Nx3, &#39;float&#39;)</span>
+<span class="sd">            Vector distance between ``atom_id`` and all other atoms.</span>
+<span class="sd">            Distance is adjusted to conform with the minimum image conv.</span>
+<span class="sd">        diff_mag : :class:`numpy.ndarray` (Nx1, &#39;float&#39; )</span>
+<span class="sd">            Distance magnitude between ``atom_id`` and all other atoms.</span>
+<span class="sd">            Distance is adjusted to conform with the minimum image conv.</span>
+<span class="sd">        any_there : boolean</span>
+<span class="sd">            If ``True``, at least one atom is within the cutoff distance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        epair : float</span>
+<span class="sd">            Scalar value for total potential energy of atom ``atom_id``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">any_there</span><span class="p">:</span>
+            <span class="n">epair</span> <span class="o">=</span> <span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="p">(</span><span class="n">diff_mag</span><span class="o">**</span><span class="p">(</span><span class="o">-</span><span class="mi">12</span><span class="p">)</span> <span class="o">-</span> <span class="n">diff_mag</span><span class="o">**</span><span class="p">(</span><span class="o">-</span><span class="mi">6</span><span class="p">)))</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">epair</span> <span class="o">=</span> <span class="mf">0.0</span>
+        <span class="k">return</span> <span class="n">epair</span>
+</div>
+<div class="viewcode-block" id="NonLocal._calc_coord"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocal._calc_coord">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_coord</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atom_id</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">diff_mag</span><span class="p">,</span> <span class="n">any_there</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculate the coordination number of atom ``atom_id``.</span>
+
+<span class="sd">        As implemented coordination number produced is the total coordination</span>
+<span class="sd">        number due to all atoms in the system regardless of type.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        atom_id : int</span>
+<span class="sd">            Atom index in snap.</span>
+<span class="sd">        diff : :class:`numpy.ndarray` (Nx3, &#39;float&#39;)</span>
+<span class="sd">            Vector distance between ``atom_id`` and all other atoms.</span>
+<span class="sd">            Distance is adjusted to conform with the minimum image conv.</span>
+<span class="sd">        diff_mag : :class:`numpy.ndarray` (Nx1, &#39;float&#39; )</span>
+<span class="sd">            Distance magnitude between ``atom_id`` and all other atoms.</span>
+<span class="sd">            Distance is adjusted to conform with the minimum image conv.</span>
+<span class="sd">        any_there : boolean</span>
+<span class="sd">            If ``True``, at least one atom is within the cutoff distance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        coord : float</span>
+<span class="sd">            Scalar value for coordination number of atom ``atom_id``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">any_there</span><span class="p">:</span>
+            <span class="n">coord</span> <span class="o">=</span> <span class="n">diff</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">coord</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">return</span> <span class="n">coord</span>
+</div>
+<div class="viewcode-block" id="NonLocal._calc_force"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocal._calc_force">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_force</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atom_id</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">diff_mag</span><span class="p">,</span> <span class="n">any_there</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculate the net force due to 12-6 Lennard-Jones</span>
+<span class="sd">        interaction on atom ``atom_id``.</span>
+
+<span class="sd">        Implementation is limited to monotomic system.  Additional terms</span>
+<span class="sd">        needed for bonded contributions.</span>
+
+<span class="sd">        Calculation algorithm not applicable to long-range forces (e.g.</span>
+<span class="sd">        electrostatics), which cannot be calculated by direct summation under</span>
+<span class="sd">        the minimum image convention.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        atom_id : int</span>
+<span class="sd">            Atom index in snap.</span>
+<span class="sd">        diff : :class:`numpy.ndarray` (Nx3, &#39;float&#39;)</span>
+<span class="sd">            Vector distance between ``atom_id`` and all other atoms.</span>
+<span class="sd">            Distance is adjusted to conform with the minimum image conv.</span>
+<span class="sd">        diff_mag : :class:`numpy.ndarray` (Nx1, &#39;float&#39; )</span>
+<span class="sd">            Distance magnitude between ``atom_id`` and all other atoms.</span>
+<span class="sd">            Distance is adjusted to conform with the minimum image conv.</span>
+<span class="sd">        any_there : boolean</span>
+<span class="sd">            If ``True``, at least one atom is within the cutoff distance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        force : :class:`numpy.ndarray`, (1x3)</span>
+<span class="sd">             Net force on atom ``atom_id``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">any_there</span><span class="p">:</span>
+            <span class="n">force</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">((</span><span class="mi">2</span><span class="o">*</span><span class="n">diff_mag</span><span class="o">**</span><span class="p">(</span><span class="o">-</span><span class="mi">14</span><span class="p">)</span> <span class="o">-</span> <span class="n">diff_mag</span><span class="o">**</span><span class="p">(</span><span class="o">-</span><span class="mi">8</span><span class="p">)),</span> <span class="o">-</span><span class="mi">24</span><span class="o">*</span><span class="n">diff</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">force</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">force</span>
+</div>
+<div class="viewcode-block" id="NonLocal._calc_virial"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocal._calc_virial">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_virial</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atom_id</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">diff_mag</span><span class="p">,</span> <span class="n">any_there</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculate the virial on atom ``atom_id`` based on LJ 12-6</span>
+<span class="sd">        interaction.</span>
+
+<span class="sd">        Implementation is limited to monotomic system.  Additional terms</span>
+<span class="sd">        needed for bonded contributions.</span>
+
+<span class="sd">        Calculation algorithm not applicable to long-range forces (e.g.</span>
+<span class="sd">        electrostatics), which cannot be calculated by direct summation under</span>
+<span class="sd">        the minimum image convention.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        atom_id : int</span>
+<span class="sd">            Atom index in snap.</span>
+<span class="sd">        diff : :class:`numpy.ndarray` (Nx3, &#39;float&#39;)</span>
+<span class="sd">            Vector distance between ``atom_id`` and all other atoms.</span>
+<span class="sd">            Distance is adjusted to conform with the minimum image conv.</span>
+<span class="sd">        diff_mag : :class:`numpy.ndarray` (Nx1, &#39;float&#39; )</span>
+<span class="sd">            Distance magnitude between ``atom_id`` and all other atoms.</span>
+<span class="sd">            Distance is adjusted to conform with the minimum image conv.</span>
+<span class="sd">        any_there : boolean</span>
+<span class="sd">            If ``True``, at least one atom is within the cutoff distance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        virial : :class:`numpy.ndarray`, (1x6)</span>
+<span class="sd">             Virial (symmetric tensor) of atom ``atom_id``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">any_there</span><span class="p">:</span>
+            <span class="n">force_per</span> <span class="o">=</span> <span class="p">(</span> <span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">diff_mag</span><span class="o">**</span><span class="p">(</span><span class="o">-</span><span class="mi">14</span><span class="p">)</span> <span class="o">-</span> <span class="n">diff_mag</span><span class="o">**</span><span class="p">(</span><span class="o">-</span><span class="mi">8</span><span class="p">))</span><span class="o">*</span><span class="p">(</span><span class="o">-</span><span class="mi">24</span><span class="o">*</span><span class="n">diff</span><span class="p">)</span><span class="o">.</span><span class="n">T</span> <span class="p">)</span><span class="o">.</span><span class="n">T</span>
+            <span class="n">v0</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span> <span class="n">force_per</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span> <span class="p">)</span>
+            <span class="n">v1</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span> <span class="n">force_per</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span> <span class="p">)</span>
+            <span class="n">v2</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span> <span class="n">force_per</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span> <span class="p">)</span>
+            <span class="n">v3</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span> <span class="n">force_per</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span> <span class="p">)</span>
+            <span class="n">v4</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span> <span class="n">force_per</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span> <span class="p">)</span>
+            <span class="n">v5</span> <span class="o">=</span> <span class="o">-</span><span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span> <span class="n">force_per</span><span class="p">[:,</span><span class="mi">2</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">2</span><span class="p">]</span> <span class="p">)</span>
+
+            <span class="n">virial</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span> <span class="p">(</span><span class="n">v0</span><span class="p">,</span> <span class="n">v1</span><span class="p">,</span> <span class="n">v2</span><span class="p">,</span> <span class="n">v3</span><span class="p">,</span> <span class="n">v4</span><span class="p">,</span> <span class="n">v5</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">virial</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span> <span class="p">(</span><span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">virial</span>
+</div>
+<div class="viewcode-block" id="NonLocal._calc_stress"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocal._calc_stress">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_stress</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atom_id</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">diff_mag</span><span class="p">,</span> <span class="n">any_there</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the per-atom stress tensor as defined in the LAMMPS</span>
+<span class="sd">        MD software package based on 12-6 Lennard-Jones interaction.</span>
+
+<span class="sd">        In this case the per-atom stress is ``stress*per_atom_volume``.</span>
+<span class="sd">        Therefore, to calculate the scalar pressure from the trace the result</span>
+<span class="sd">        should be divided by (``dim*volume``) to obtain the pressure, where</span>
+<span class="sd">        ``dim`` is the dimensionality of the system.</span>
+
+<span class="sd">        Implementation is limited to monotomic system.  Additional terms</span>
+<span class="sd">        needed for bonded contributions or constraints on atom motion.</span>
+
+<span class="sd">        Calculation algorithm not applicable to long-range forces (e.g.</span>
+<span class="sd">        electrostatics), which cannot be calculated by direct summation under</span>
+<span class="sd">        the minimum image convention.</span>
+
+<span class="sd">        **See**: http://lammps.sandia.gov/doc/compute_stress_atom.html</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        atom_id : int</span>
+<span class="sd">            Atom index in snap.</span>
+<span class="sd">        diff : :class:`numpy.ndarray` (Nx3, &#39;float&#39;)</span>
+<span class="sd">            Vector distance between ``atom_id`` and all other atoms.</span>
+<span class="sd">            Distance is adjusted to conform with the minimum image conv.</span>
+<span class="sd">        diff_mag : :class:`numpy.ndarray` (Nx1, &#39;float&#39; )</span>
+<span class="sd">            Distance magnitude between ``atom_id`` and all other atoms.</span>
+<span class="sd">            Distance is adjusted to conform with the minimum image conv.</span>
+<span class="sd">        any_there : boolean</span>
+<span class="sd">            If ``True``, at least one atom is within the cutoff distance.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        stress : :class:`numpy.ndarray`, (1x6)</span>
+<span class="sd">            Atomwise stress (symmetric tensor) of atom ``atom_id``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">any_there</span><span class="p">:</span>
+
+            <span class="n">m</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="p">[</span><span class="n">atom_id</span><span class="p">]</span>
+            <span class="n">v</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span><span class="p">[</span><span class="n">atom_id</span><span class="p">]</span>
+
+            <span class="n">force_per</span> <span class="o">=</span> <span class="p">(</span> <span class="p">(</span><span class="mi">2</span><span class="o">*</span><span class="n">diff_mag</span><span class="o">**</span><span class="p">(</span><span class="o">-</span><span class="mi">14</span><span class="p">)</span><span class="o">-</span><span class="n">diff_mag</span><span class="o">**</span><span class="p">(</span><span class="o">-</span><span class="mi">8</span><span class="p">))</span><span class="o">*</span><span class="p">(</span><span class="o">-</span><span class="mi">24</span><span class="o">*</span><span class="n">diff</span><span class="p">)</span><span class="o">.</span><span class="n">T</span> <span class="p">)</span><span class="o">.</span><span class="n">T</span>
+
+            <span class="n">s0</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="o">*</span><span class="p">(</span> <span class="n">m</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">-</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">force_per</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">0</span><span class="p">])</span> <span class="p">)</span>
+            <span class="n">s1</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="o">*</span><span class="p">(</span> <span class="n">m</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">force_per</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span> <span class="p">)</span>
+            <span class="n">s2</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="o">*</span><span class="p">(</span> <span class="n">m</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">-</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">force_per</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">2</span><span class="p">])</span> <span class="p">)</span>
+            <span class="n">s3</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="o">*</span><span class="p">(</span> <span class="n">m</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">-</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">force_per</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span> <span class="p">)</span>
+            <span class="n">s4</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="o">*</span><span class="p">(</span> <span class="n">m</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">-</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">force_per</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">2</span><span class="p">])</span> <span class="p">)</span>
+            <span class="n">s5</span> <span class="o">=</span> <span class="o">-</span><span class="mi">1</span><span class="o">*</span><span class="p">(</span> <span class="n">m</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">*</span><span class="n">v</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span><span class="o">-</span> <span class="mf">0.5</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">force_per</span><span class="p">[:,</span><span class="mi">2</span><span class="p">],</span> <span class="n">diff</span><span class="p">[:,</span><span class="mi">2</span><span class="p">])</span> <span class="p">)</span>
+
+            <span class="n">stress</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span> <span class="p">(</span><span class="n">s0</span><span class="p">,</span> <span class="n">s1</span><span class="p">,</span> <span class="n">s2</span><span class="p">,</span> <span class="n">s3</span><span class="p">,</span> <span class="n">s4</span><span class="p">,</span> <span class="n">s5</span><span class="p">))</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">stress</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">,</span> <span class="mf">0.</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">stress</span>
+</div>
+<div class="viewcode-block" id="NonLocal._calc_diff"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocal._calc_diff">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_diff</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atom_id</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the distance (magnitude and vector) between ``atom_id`` and</span>
+<span class="sd">        other atoms in the snap.</span>
+
+<span class="sd">        Calculated distance is limited by :attr:`NonLammps.cutoff`.</span>
+
+<span class="sd">        Resuts are stored in :attr:`NonLocal.diff` and</span>
+<span class="sd">        :attr:`NonLocal.diff_mag`.</span>
+
+<span class="sd">        `NxN` difference arrays are not calculated or stored due to large</span>
+<span class="sd">        memory requirements.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        atom_id : int</span>
+<span class="sd">            Index number of central atom in distance calculation.</span>
+<span class="sd">            (i.e. all distances are relative to its position.)</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        diff : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">            Vector distance betweeen atom ``atom_id`` and all other atoms</span>
+<span class="sd">            within the cutoff distance.</span>
+<span class="sd">        diff_mag : :class:`numpy.ndarray`, (N,1)</span>
+<span class="sd">            Scalar distance betweeen atom ``atom_id`` and all other atoms</span>
+<span class="sd">            within the cutoff distance.</span>
+<span class="sd">        any_there : boolean</span>
+<span class="sd">            If ``True``, there is at least one atom within the cutoff radius</span>
+<span class="sd">            of atom ``atom_id``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">r0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">xyz</span><span class="p">[</span><span class="n">atom_id</span><span class="p">]</span>
+
+        <span class="n">bin_coll</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">binning</span><span class="o">.</span><span class="n">get_surrounding</span><span class="p">(</span><span class="n">r0</span><span class="p">)</span>
+        <span class="n">bin_coll</span><span class="o">.</span><span class="n">sort</span><span class="p">()</span>
+
+        <span class="c"># Removing itself from nearest neighbours.</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">bin_coll</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="n">atom_id</span><span class="p">)</span>
+        <span class="k">except</span> <span class="ne">ValueError</span><span class="p">:</span>
+            <span class="c"># Can be caused by unhandled edge cases at boundaries.</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Atom </span><span class="si">%s</span><span class="s"> not in own surrounding bins&#39;</span> <span class="o">%</span> <span class="n">atom_id</span> <span class="p">)</span>
+
+        <span class="n">diff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">xyz</span><span class="p">[</span><span class="n">bin_coll</span><span class="p">]</span> <span class="o">-</span> <span class="n">r0</span>
+        <span class="n">diff</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">mic_distance</span><span class="p">(</span><span class="n">diff</span><span class="p">)</span>
+
+        <span class="n">diff_mag</span> <span class="o">=</span> <span class="n">vectors</span><span class="o">.</span><span class="n">magnitude</span><span class="p">(</span><span class="n">diff</span><span class="p">)</span>
+
+        <span class="c"># Eliminating atoms farther than cutoff.</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">diff_mag</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span>
+        <span class="n">diff</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+        <span class="n">diff_mag</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">compress</span><span class="p">(</span><span class="n">mask</span><span class="p">,</span> <span class="n">diff_mag</span><span class="p">)</span>
+
+        <span class="c"># There are no atoms within the cutoff distance.</span>
+        <span class="k">if</span> <span class="n">diff</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="n">any_there</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="c"># There is at least one atom within the cutoff distance.</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">any_there</span> <span class="o">=</span> <span class="bp">True</span>
+
+        <span class="k">return</span> <span class="n">diff</span><span class="p">,</span> <span class="n">diff_mag</span><span class="p">,</span> <span class="n">any_there</span>
+</div>
+<div class="viewcode-block" id="NonLocal.run"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocal.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mass_name</span><span class="o">=</span><span class="s">&#39;mass&#39;</span><span class="p">,</span> <span class="n">velocity_name</span><span class="o">=</span><span class="s">&#39;velocity&#39;</span> <span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Run all calculations as defined by :attr:`NonLocal.to_calc`.</span>
+
+<span class="sd">        Makes use of cell decomposition to reduce work in looking for nearest</span>
+<span class="sd">        neighbours.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        mass_name : string, [default=&#39;mass&#39;]</span>
+<span class="sd">            Name for atomwise mass vector.</span>
+<span class="sd">        velocity_name : string, [default=&#39;velocity&#39;]</span>
+<span class="sd">            Name for atomwise velocity vector collection.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s">&#39;velocity&#39;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">vel_comps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">vectors</span><span class="p">[</span><span class="n">velocity_name</span><span class="p">][</span><span class="s">&#39;comps&#39;</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">velocity</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">(</span><span class="n">vel_comps</span><span class="p">)</span>
+        <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="s">&#39;mass&#39;</span><span class="p">)</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">mass_name</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">atom_id</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">xyz</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="n">diff</span><span class="p">,</span> <span class="n">diff_mag</span><span class="p">,</span> <span class="n">any_there</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_calc_diff</span><span class="p">(</span><span class="n">atom_id</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="n">atom_id</span><span class="p">]</span> <span class="o">=</span> \
+                  <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s">&#39;_calc_&#39;</span><span class="o">+</span><span class="n">i</span><span class="p">)(</span><span class="n">atom_id</span><span class="p">,</span> <span class="n">diff</span><span class="p">,</span> <span class="n">diff_mag</span><span class="p">,</span> <span class="n">any_there</span><span class="p">)</span>
+
+        <span class="c"># Making each results array an attribute</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">i</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+
+<span class="c"># TODO: Use overt Python calls to LAMMPS library rather than input file.</span>
+<span class="c">#           - e.g. calculations defined by NonLammps method not input file</span>
+<span class="c"># TODO: Add call to generate LAMMPS data file from snap object at run time.</span>
+<span class="c"># TODO: Extend to other types of properties fix, atom properties (velocity)</span>
+
+</div></div>
+<div class="viewcode-block" id="NonLammps"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLammps">[docs]</a><span class="k">class</span> <span class="nc">NonLammps</span><span class="p">(</span><span class="n">AtomCalc</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Class used for calculating non-local properties using a Python wrapped</span>
+<span class="sd">    LAMMPS library to perform the calculation.</span>
+
+<span class="sd">    Non-local properties are atomwise properties like stress and potential</span>
+<span class="sd">    energy which are a function of all other atoms in the simulation.</span>
+
+<span class="sd">    Calculation is restricted to properties which are produced by LAMMPS</span>
+<span class="sd">    compute commands.</span>
+
+<span class="sd">    LAMMPS is run for a single timestep to perform the calculation.  Therefore,</span>
+<span class="sd">    this operation is intended for use if a calculation was not done at</span>
+<span class="sd">    the original simulation runtime.</span>
+
+<span class="sd">    Current implementation uses a modified serial version of LAMMPS built</span>
+<span class="sd">    as a library.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Snap object used for calculation.</span>
+<span class="sd">    input_fn : string</span>
+<span class="sd">        LAMMPS input file for controlling LAMMPS library.</span>
+<span class="sd">        LAMMPS input file is written separately as per format specified</span>
+<span class="sd">        by the LAMMPS user manual.</span>
+<span class="sd">        Input file should contain reference to LAMMPS data file which</span>
+<span class="sd">        contains the atom positions and velocities.</span>
+<span class="sd">    calcs : iterable, [default=None ]</span>
+<span class="sd">        List of property names to calculate.</span>
+<span class="sd">        If ``calcs is None``, then all implemented calculations are done.</span>
+
+<span class="sd">        Implemented calculations: ``[&#39;coord&#39;, &#39;epair&#39;, &#39;force&#39;, &#39;stress&#39;]``</span>
+<span class="sd">        which must match the name of LAMMPS compute.</span>
+
+<span class="sd">        To add additional calculaion types must add additional item</span>
+<span class="sd">        using :meth:`NonLammps.add_new_calc` method.</span>
+<span class="sd">    lammps_log : string, [default=&#39;lammps_mdhandle.log&#39;]</span>
+<span class="sd">        Log file name for LAMMPS run.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    input_fn : string</span>
+<span class="sd">        LAMMPS input file name used to setup calculations.</span>
+<span class="sd">    lammps_log : string</span>
+<span class="sd">        LAMMPS log name.</span>
+<span class="sd">    cutoff : float</span>
+<span class="sd">        Cutoff associated with interatomic interaction.</span>
+<span class="sd">    results : dict</span>
+<span class="sd">        All results from calculations in :attr:`NonLammps.to_calc`</span>
+<span class="sd">        are stored in `dict` organized by name.  Results also stored in</span>
+<span class="sd">        attributes of :class:`NonLammps`.</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    --------</span>
+<span class="sd">    add_new_calc(name, dtype=&#39;float&#39;, collection_type=&#39;scalars&#39;) </span>
+<span class="sd">        Add metadata for new calculation function.</span>
+<span class="sd">        Overrides completely :meth:`AtomCalc.add_new_calc`.</span>
+<span class="sd">    run()</span>
+<span class="sd">        Runs all calculations stored in :attr:`NonLammps.to_calc`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">input_fn</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">,</span> <span class="n">calcs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">wrap</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                                       <span class="n">lammps_log</span><span class="o">=</span><span class="s">&#39;lammps_mdhandle.log&#39;</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">NonLammps</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="p">,</span> <span class="n">wrap</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">input_fn</span> <span class="o">=</span> <span class="n">input_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lammps_log</span> <span class="o">=</span> <span class="n">lammps_log</span>
+
+        <span class="c"># Not currently used within NonLammps obj</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="n">cutoff</span>
+
+        <span class="c"># Default calculations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;coord&#39;</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;int&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;epair&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;force&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;vectors&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;stress&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;symm_tensors&#39;</span><span class="p">)</span>
+
+        <span class="c"># must be called before NonLammps.run(...)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup_calculations</span><span class="p">()</span>
+
+<div class="viewcode-block" id="NonLammps.add_new_calc"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLammps.add_new_calc">[docs]</a>    <span class="k">def</span> <span class="nf">add_new_calc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;scalars&#39;</span><span class="p">,</span>
+                                                <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds information about the output of a new calculation type beyond the</span>
+<span class="sd">        default set: ``[&#39;coord&#39;, &#39;epair&#39;, &#39;force&#39;, &#39;stress&#39;]``</span>
+
+<span class="sd">        For :class:`NonLammps`, new calculations are defined within the</span>
+<span class="sd">        LAMMPS data file rather than via a NonLammps method.  Therefore, the</span>
+<span class="sd">        name must match the name of the LAMMPS compute.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of new calculation.  Must be the name of the LAMMPS compute.</span>
+<span class="sd">        dtype : string, {&#39;int&#39; | &#39;float&#39;}, [default=&#39;float&#39;]</span>
+<span class="sd">            Data type for calculation.</span>
+<span class="sd">        collection_type : string, [default=&#39;scalars&#39;]</span>
+<span class="sd">            Defines the shape of the output (i.e. vectors: Nx3)</span>
+<span class="sd">            {&#39;scalars&#39; | &#39;vectors&#39; | &#39;tensors&#39; | &#39;symm_tensors&#39;}</span>
+<span class="sd">        location : string, [default=&#39;Node&#39;]</span>
+<span class="sd">            For atomwise properties as calculated by subclasses of</span>
+<span class="sd">            :class:`AtomCalc`, only `&#39;Node&#39;` is relevant.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">NonLammps</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> 
+                                                  <span class="n">collection_type</span><span class="p">,</span> <span class="n">location</span><span class="p">)</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Add new calculation </span><span class="si">%s</span><span class="s"> to LAMMPS input file&#39;</span> <span class="o">%</span> <span class="n">name</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="NonLammps.run"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLammps.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Launches LAMMPS based calculation defined by requested calculations and</span>
+<span class="sd">        the LAMMPS input file (:attr:`NonLammps.input_fn`).</span>
+
+<span class="sd">        Result of calculations stored in :attr:`NonLammps.results` and</span>
+<span class="sd">        :class:`NonLammps` attribute with name corresponding</span>
+<span class="sd">        to the calculation name stored in :attr:`NonLammps.calcs`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+
+        <span class="c"># Launching LAMMPS</span>
+        <span class="n">lmp</span> <span class="o">=</span> <span class="n">lammps</span><span class="p">()</span>
+        <span class="n">lmp</span><span class="o">.</span><span class="n">command</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lammps_log</span><span class="p">)</span>
+
+        <span class="c"># Reading LAMMPS input file.</span>
+        <span class="n">lines</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">input_fn</span><span class="p">,</span> <span class="s">&#39;r&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">readlines</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">lines</span><span class="p">:</span>
+            <span class="n">lmp</span><span class="o">.</span><span class="n">command</span><span class="p">(</span><span class="n">line</span><span class="p">)</span>
+
+        <span class="c"># HARDCODED: Running LAMMPS for a single timestep</span>
+        <span class="n">lmp</span><span class="o">.</span><span class="n">command</span><span class="p">(</span><span class="s">&#39;run 0&#39;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">types</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;scalars&#39;</span><span class="p">:</span>
+                <span class="n">output_type</span> <span class="o">=</span> <span class="mi">0</span>
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">lmp</span><span class="o">.</span><span class="n">lazy_extract_compute</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">output_type</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ctypeslib</span><span class="o">.</span><span class="n">as_array</span><span class="p">(</span><span class="n">tmp</span><span class="p">)</span><span class="o">.</span>\
+                                                <span class="n">astype</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">dtypes</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+
+            <span class="c"># Non-scalars required special handling of 2-dim shapes</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">types</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;vectors&#39;</span><span class="p">:</span>
+                    <span class="n">output_type</span> <span class="o">=</span> <span class="mi">1</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">types</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;tensors&#39;</span><span class="p">:</span>
+                    <span class="n">output_type</span> <span class="o">=</span> <span class="mi">2</span>
+                <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">types</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;symm_tensors&#39;</span><span class="p">:</span>
+                    <span class="n">output_type</span> <span class="o">=</span> <span class="mi">3</span>
+                <span class="c"># Pathalogical case - cannot find matching type. Skip</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Could not find type </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">types</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+                    <span class="k">continue</span>
+
+                <span class="n">tmp</span> <span class="o">=</span> <span class="n">lmp</span><span class="o">.</span><span class="n">lazy_extract_compute</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">output_type</span><span class="p">)</span>
+
+                <span class="c"># Saving output to NonLammps.results.</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ctypeslib</span><span class="o">.</span><span class="n">as_array</span><span class="p">(</span><span class="n">tmp</span><span class="p">)</span><span class="o">.</span>\
+                                        <span class="n">reshape</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">],</span> 
+                                                            <span class="n">PROP_SIZE</span><span class="p">[</span><span class="n">name</span><span class="p">]))</span>
+
+            <span class="c"># Putting each result in an attribute as well</span>
+            <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">name</span><span class="p">])</span>
+
+        <span class="c"># Closing LAMMPS session</span>
+        <span class="n">lmp</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+</div></div>
+<div class="viewcode-block" id="Local"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.Local">[docs]</a><span class="k">class</span> <span class="nc">Local</span><span class="p">(</span><span class="n">AtomCalc</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Calculates atomwise quantities which are only dependent on the</span>
+<span class="sd">    properties of each individual atom (e.g. atomwise kinetic energy).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Snap object to be processed.</span>
+<span class="sd">    calcs : iterable</span>
+<span class="sd">        List of local atomwise property calculations to perform.</span>
+<span class="sd">        Implemented calculations: ``[&#39;ke&#39;, ]``</span>
+<span class="sd">        If ``calcs is None``, all available calculations are done.</span>
+<span class="sd">        [default=None]</span>
+<span class="sd">    wrap : boolean</span>
+<span class="sd">        If ``True``, atom coordinates are wrapped back into the primary</span>
+<span class="sd">        simullation domain, subject to PBC.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    results : dict</span>
+<span class="sd">        Results from calculations stored in </span>
+<span class="sd">        :attr:`Local.results` and in attributes of :class:`Local`.</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    ---------</span>
+<span class="sd">    run()</span>
+<span class="sd">        Runs all calculations stored in :attr:`Local.to_calc`.</span>
+
+<span class="sd">    _calc_ke()</span>
+<span class="sd">        Calculates atomiwise kinetic energy.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">wrap</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">Local</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="p">,</span> <span class="n">wrap</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;ke&#39;</span><span class="p">)</span>
+
+        <span class="c"># Must be run before calling Local.run(...)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup_calculations</span><span class="p">()</span>
+
+<div class="viewcode-block" id="Local._calc_ke"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.Local._calc_ke">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_ke</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates atomwise kinetic energy from atomwise mass and velocity.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">            Atomwise kinetic energy.</span>
+<span class="sd">            Result is also stored in :attr:`Local.ke` and</span>
+<span class="sd">            :attr:`Local.results[&#39;ke&#39;]`</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">u</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">]</span>
+        <span class="n">units_factor</span> <span class="o">=</span> <span class="n">units</span><span class="o">.</span><span class="n">MASS</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">VELOCITY</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span>  <span class="o">/</span> <span class="n">units</span><span class="o">.</span><span class="n">ENERGY</span><span class="p">[</span><span class="n">u</span><span class="p">]</span>
+
+        <span class="n">mass_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;ke&#39;</span><span class="p">][</span><span class="s">&#39;name&#39;</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span>
+        <span class="n">velocity_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;ke&#39;</span><span class="p">][</span><span class="s">&#39;name&#39;</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="n">mass</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">mass_name</span><span class="p">)</span>
+        <span class="n">vel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">(</span><span class="n">velocity_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">ke</span> <span class="o">=</span> <span class="n">units_factor</span> <span class="o">*</span> <span class="p">(</span><span class="mf">0.5</span> <span class="o">*</span> <span class="n">mass</span> <span class="o">*</span> 
+                       <span class="n">vectors</span><span class="o">.</span><span class="n">sq_magnitude</span><span class="p">(</span><span class="n">vel</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="s">&#39;dtype&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="s">&#39;ke&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">ke</span>
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">ke</span>
+</div>
+<div class="viewcode-block" id="Local.run"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.Local.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Runs all atomwise property calculations as listed in</span>
+<span class="sd">        :attr:`Local.to_calc`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+            <span class="nb">getattr</span><span class="p">(</span><span class="s">&#39;_calc_&#39;</span><span class="o">+</span><span class="n">i</span><span class="p">)()</span>
+
+
+<span class="c"># =============================================================================</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../properties.html" >mdhandle.properties</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

@@ -1,0 +1,612 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.snap &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.snap</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Continer for holding information on a single simulation snapshot.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+
+<span class="c"># TODO: Abstract out direct use of XDMF writer.</span>
+<span class="c"># TODO: Consider adding scalars list like vectors to metadata</span>
+<span class="c"># TODO: Add dedicated getter for binned data arrays.  Currently using</span>
+<span class="c">#       Snap.get_scalar().</span>
+<span class="c"># TODO: Use reader/writer rather than operating on the HDF file itself.</span>
+<span class="c">#       or make Snap the only place that files are opened and managed.</span>
+<span class="c"># TODO: Change get_scalar, get_vector, etc. so can be used by gridded datasets</span>
+<span class="c">#       - Currently data in gridded datasets stored as a single bloc</span>
+<span class="c">#         so best to use get_scalar.</span>
+<span class="c">#       - Need to use col_mapping meta to understand what to do.</span>
+
+
+<span class="c">#---------------------------------------------------------------------------</span>
+
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="kn">import</span> <span class="nn">tables</span> <span class="kn">as</span> <span class="nn">pyT</span>
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">units</span>
+<span class="kn">from</span> <span class="nn">mdhandle.writers.xdmf</span> <span class="kn">import</span> <span class="n">XDMFWriter</span>
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">mdhandle.sim_cell</span> <span class="kn">import</span> <span class="n">SimCell</span>
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">vectors</span>
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">tensors</span>
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">settings</span>
+
+<span class="c">#---------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="Snap"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap">[docs]</a><span class="k">class</span> <span class="nc">Snap</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    A class to hold a single snapshot (i.e. heavy atomwise data and light</span>
+<span class="sd">    metadata).</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    fn : string</span>
+<span class="sd">        Filename of HDF file containing simulation snapshot data.</span>
+<span class="sd">    dataset_name : string, [default=&#39;rawSimResults&#39;]</span>
+<span class="sd">        Name of data set within HDF file.  Datasets are stored</span>
+<span class="sd">        at the root of the HDF file.  Default dataest ``&#39;rawSimResults&#39;``</span>
+<span class="sd">        should always be present and contains raw atomwise output.</span>
+<span class="sd">    is_new_data : boolean, [default=False]</span>
+<span class="sd">        Boolean flag. True if snap is house new data rather than</span>
+<span class="sd">        reading existing dataset from disk.</span>
+<span class="sd">    verbose : boolean, [default=False]</span>
+<span class="sd">        Boolean flag for verbosity of user input/output.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    filename : string</span>
+<span class="sd">        Absolute filename of snapshot.</span>
+<span class="sd">    fn_base : string </span>
+<span class="sd">        ``filename`` without absolute path.</span>
+<span class="sd">    directory : string</span>
+<span class="sd">        Absoulte path of containing directory.</span>
+<span class="sd">    active_dataset_name : string</span>
+<span class="sd">        Name of active dataset within snapshot file.</span>
+<span class="sd">    active_dataset : :class:`pytables.tables.group.Group`.</span>
+<span class="sd">        Active dataset object.</span>
+<span class="sd">    selections : list of :class:`mdhandle.selection.Selection`</span>
+<span class="sd">        List of selection objects.</span>
+<span class="sd">    meta : dict</span>
+<span class="sd">        Dictionary with all metadata in active dataset.</span>
+<span class="sd">    sim_cell :  :class:`mdhandle.sim_cell.SimCell` object.</span>
+<span class="sd">        Contains geometric information about the simulation domain.</span>
+<span class="sd">    col_mapping: dict</span>
+<span class="sd">        Dictionary of all atom/grid scalars and metadata.</span>
+<span class="sd">    vectors : dict</span>
+<span class="sd">        Dictionary of vectors and metadata.</span>
+<span class="sd">    tensors : dict</span>
+<span class="sd">        Dictionary of tensors and metadata.</span>
+<span class="sd">    symm_tensors : dict</span>
+<span class="sd">        Dictionary of symmetric tensors and metadata.</span>
+<span class="sd">    verbose : boolean</span>
+<span class="sd">        Flag for user I/O verbosity.</span>
+<span class="sd">    _mask : boolean :class:`numpy.ndarray` </span>
+<span class="sd">        ``True`` entries mark atoms included in active selection.</span>
+<span class="sd">    writer : :class:`mdhandle.writers.xdmf.XDMFWriter`</span>
+<span class="sd">        XDMF writer object.</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    --------</span>
+<span class="sd">    add_selection(new_selection)</span>
+<span class="sd">        Adds new selection object.</span>
+<span class="sd">    reset_selections()</span>
+<span class="sd">        Clears the list of selections objects.</span>
+<span class="sd">    get_datasets()</span>
+<span class="sd">        Returns list of datasets within HDF file.</span>
+<span class="sd">    set_active_dataset(name, create=False)</span>
+<span class="sd">        Sets active dataset from within HDF file.</span>
+<span class="sd">    gather_data()</span>
+<span class="sd">        Retrieves metadata from active dataset.</span>
+<span class="sd">    dict_metadata()</span>
+<span class="sd">        Returns dictionary of all metadata in active dataset.</span>
+<span class="sd">    get_metadata(name)</span>
+<span class="sd">        Returns single metadata item.</span>
+<span class="sd">    get_scalar(name, raw_data=False)</span>
+<span class="sd">        Returns scalar collection (i.e. scalar for each atom or grid point).</span>
+<span class="sd">    get_vector(comp_names, raw_data=False)</span>
+<span class="sd">        Returns vector collection.</span>
+<span class="sd">    get_tensor(comp_names, raw_data=False)</span>
+<span class="sd">        Returns tensor collection.</span>
+<span class="sd">    get_symm_tensor(comp_names, raw_data=False)</span>
+<span class="sd">        Returns symmetric tensor collection.</span>
+<span class="sd">    _use_selections()</span>
+<span class="sd">        Applies selections to atomwise (or grided) data.</span>
+
+<span class="sd">    See Also</span>
+<span class="sd">    --------</span>
+<span class="sd">    :class:`mdhandle.simcontainer.SimContainer`</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="n">dataset_name</span><span class="o">=</span><span class="s">&#39;rawSimResults&#39;</span><span class="p">,</span>
+                                            <span class="n">is_new_data</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">(</span><span class="n">verbose</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">filename</span> <span class="o">=</span> <span class="n">fn</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">fn_base</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">basename</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">directory</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c"># List of Selection object used to extract only part of snap.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selections</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="c"># Simulation output metadata information.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">col_mapping</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vectors</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="c"># Geometry meta-data.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sim_cell</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">writer</span> <span class="o">=</span> <span class="n">XDMFWriter</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">open_file</span><span class="p">()</span>
+
+        <span class="c"># Must be done after setting self.writer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_active_dataset</span><span class="p">(</span><span class="n">dataset_name</span><span class="p">,</span> <span class="n">create_new</span><span class="o">=</span><span class="n">is_new_data</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Short and identifiable string represenation of :class:`Snap` object.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        string_rep : string</span>
+<span class="sd">            String representation of object (&lt; 80 chars).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">string_rep</span> <span class="o">=</span> <span class="s">&#39;Snap </span><span class="si">%s</span><span class="s"> - </span><span class="si">%s</span><span class="s"> - </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn_base</span><span class="p">,</span>
+                                            <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">,</span> <span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">string_rep</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prints multi-line textual representation of :class:`Snap` object.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        string_rep : string</span>
+<span class="sd">            Multiple line string represenation of object.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">string_rep</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">===  Snap Object ====</span>
+<span class="s">Sim Name: </span><span class="se">\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">Dataset Name: </span><span class="se">\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">Units: </span><span class="se">\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">Num. Atoms: </span><span class="se">\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">&quot;&quot;&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;sim_name&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">,</span> 
+       <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">string_rep</span>
+
+<div class="viewcode-block" id="Snap.set_active_dataset"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.set_active_dataset">[docs]</a>    <span class="k">def</span> <span class="nf">set_active_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">reset_meta</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">create_new</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Sets the active dataset within HDF file.</span>
+<span class="sd">        The active dataset is the one available via other Snap methods.</span>
+<span class="sd">        Dataset is selected by name at root (&#39;/&#39;) of HDF file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of active dataset.</span>
+<span class="sd">        create : boolean</span>
+<span class="sd">            Boolean flag used for creating a new dataset.</span>
+<span class="sd">        reset_meta : boolean</span>
+<span class="sd">            If ``True``, metadata and selections in snap are reset.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">try</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">getNode</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span> <span class="o">=</span> <span class="n">name</span>
+            
+            <span class="c"># Resetting metadata</span>
+            <span class="k">if</span> <span class="n">reset_meta</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">selections</span> <span class="o">!=</span> <span class="p">[]:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Resetting metadata and</span><span class="se">\</span>
+<span class="s">                                                                selections.&#39;</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">reset_selections</span><span class="p">()</span>
+
+                <span class="bp">self</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+
+        <span class="k">except</span> <span class="n">pyT</span><span class="o">.</span><span class="n">NoSuchNodeError</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">create_new</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">hdf_create_dataset</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">getNode</span><span class="p">(</span><span class="s">&#39;/&#39;</span><span class="p">,</span> <span class="n">name</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span> <span class="o">=</span> <span class="n">name</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Created new dataset </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">name</span><span class="p">)</span>
+                
+                <span class="c"># Reinitializing attributes for newly created datasets</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">reset_selections</span><span class="p">()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">col_mapping</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">vectors</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span> <span class="o">=</span> <span class="p">{}</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span> <span class="o">=</span> <span class="p">{}</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Requested dataset </span><span class="si">%s</span><span class="s"> does not exist&#39;</span> <span class="o">%</span> <span class="n">name</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="Snap.get_datasets"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.get_datasets">[docs]</a>    <span class="k">def</span> <span class="nf">get_datasets</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Walks the root of related HDF file and return list of datasets.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        datasets : list</span>
+<span class="sd">            List of datasets contained within :class:`Snap` file.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">datasets</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span><span class="o">.</span><span class="n">_v_name</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span><span class="o">.</span><span class="n">walkGroups</span><span class="p">()</span> 
+                                                        <span class="k">if</span> <span class="n">i</span><span class="o">.</span><span class="n">_v_name</span> <span class="o">!=</span> <span class="s">&#39;/&#39;</span><span class="p">]</span>
+        <span class="k">return</span> <span class="n">datasets</span>
+</div>
+<div class="viewcode-block" id="Snap.gather_data"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.gather_data">[docs]</a>    <span class="k">def</span> <span class="nf">gather_data</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Gather and calculate metadata from active dataset.</span>
+<span class="sd">        </span>
+<span class="sd">        Also used to ensure that the HDF file associated with the snapshot</span>
+<span class="sd">        is active.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">is_open</span><span class="p">()</span> <span class="ow">is</span> <span class="bp">False</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">f_hdf</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">open_file</span><span class="p">()</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_active_dataset</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">dict_metadata</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">col_mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;col_mapping&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vectors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;vectors&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;tensors&#39;</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;symm_tensors&#39;</span><span class="p">]</span>
+
+        <span class="c"># Creating SimCell object to store information re simulation cell</span>
+        <span class="n">box_len</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;xhi&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;xlo&#39;</span><span class="p">],</span>
+                         <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;yhi&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;ylo&#39;</span><span class="p">],</span>
+                         <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;zhi&#39;</span><span class="p">]</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;zlo&#39;</span><span class="p">]</span> <span class="p">))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sim_cell</span> <span class="o">=</span> <span class="n">SimCell</span><span class="p">(</span><span class="n">box_len</span><span class="p">,</span> <span class="n">pbc</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;pbc&#39;</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">]</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">units</span><span class="o">.</span><span class="n">UNITS_ALLOWED</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Snap units </span><span class="si">%s</span><span class="s"> not allowed&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">])</span>
+
+</div>
+<div class="viewcode-block" id="Snap.get_metadata"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.get_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">get_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns value for matadata item associated with  ``name``.</span>
+<span class="sd">        Data is retreived from the current active dataset.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of metadata item to retrieve.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">            Metadata item associated with ``name``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">return</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_dataset</span><span class="o">.</span><span class="n">_v_attrs</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">name</span><span class="p">))</span>
+</div>
+<div class="viewcode-block" id="Snap.dict_metadata"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.dict_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">dict_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns dictionary indexed by property name, for all matadata</span>
+<span class="sd">        stored in HDF file for snapshot.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        meta_dict : dict</span>
+<span class="sd">            Dictionary of ``string``-`value`` pairs for all</span>
+<span class="sd">            metadata associated with the active snapshot.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">meta_dict</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset</span><span class="o">.</span><span class="n">_v_attrs</span><span class="o">.</span><span class="n">_f_list</span><span class="p">():</span>
+            <span class="n">meta_dict</span><span class="p">[</span><span class="n">item</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">get_metadata</span><span class="p">(</span><span class="n">item</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">meta_dict</span>
+</div>
+<div class="viewcode-block" id="Snap.add_selection"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.add_selection">[docs]</a>    <span class="k">def</span> <span class="nf">add_selection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_selection</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds a :class:`mdhandle.properties.selection.Selection` object to</span>
+<span class="sd">        snapshot.</span>
+
+<span class="sd">        Selections are stored in a list at :attr:`Snap.selections` and act to</span>
+<span class="sd">        sequentially select sub-sets of atoms within the snapshot.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        new_selection : :class:`mdhandle.properties.selection.Selection`</span>
+<span class="sd">            Selection object object used to choose a sub-set of</span>
+<span class="sd">            atoms within the snapshot.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selections</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_selection</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="Snap.reset_selections"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.reset_selections">[docs]</a>    <span class="k">def</span> <span class="nf">reset_selections</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Removes all existing selections stored in :attr:`Snap.selections`.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        ----------</span>
+<span class="sd">        :meth:`Snap.add_selection`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selections</span> <span class="o">=</span> <span class="p">[]</span>
+</div>
+<div class="viewcode-block" id="Snap._use_selections"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap._use_selections">[docs]</a>    <span class="k">def</span> <span class="nf">_use_selections</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Applies list of selections stored in self.selections.</span>
+
+<span class="sd">        Selections are applied sequentially from ``Snap.selections[0]``,</span>
+<span class="sd">        ``Snap.selections[1]``, ... to filter atoms within the snapshot.</span>
+
+<span class="sd">        The result of all selection is stored in :attr:`Snap._mask`, which is an</span>
+<span class="sd">        array with a value of either ``0`` (unselected) or ``1`` (selected),</span>
+<span class="sd">        which is used to filter any atomwise results (i.e. scalar, vector,</span>
+<span class="sd">        tensor collections)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Setting default mask: All atoms are selected by np.ones.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;atoms&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">],</span>  <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;3DRegular&#39;</span><span class="p">:</span>
+            <span class="c"># TODO: change the way to get the shape of the grid arrays</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">)</span><span class="o">.</span><span class="n">shape</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">sel</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selections</span><span class="p">:</span>
+            <span class="c"># The snap object (i.e. self is passed through to the masking)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_mask</span> <span class="o">*=</span> <span class="n">sel</span><span class="o">.</span><span class="n">calculate_mask</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="Snap.good_grid"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.good_grid">[docs]</a>    <span class="k">def</span> <span class="nf">good_grid</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        If active dataset in HDF file returns ``True``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">IMPLEMENTED_GRIDS</span><span class="p">:</span>
+            <span class="k">return</span> <span class="bp">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Grid type </span><span class="si">%s</span><span class="s"> unknown&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">])</span>
+            <span class="k">return</span> <span class="bp">False</span>
+
+</div>
+<div class="viewcode-block" id="Snap.get_scalar"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.get_scalar">[docs]</a>    <span class="k">def</span> <span class="nf">get_scalar</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Gets and returns atwomwise scalar (:class:`numpy.ndarray`, (Nx1)).</span>
+
+<span class="sd">        If ``raw_data`` is ``False`` and :attr:`~Snap.selections` contains</span>
+<span class="sd">        active selections, the data associated with the selected atoms</span>
+<span class="sd">        is returned.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of scalar in HDF file.</span>
+<span class="sd">        raw_data : boolean, [default=False]</span>
+<span class="sd">            If ``True``, avoids the use of any existing selections.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        scalar : :class:`numpy.ndarray`, (Nx1)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">arr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset</span><span class="o">.</span><span class="n">_f_getChild</span><span class="p">(</span><span class="n">name</span><span class="p">)</span>
+
+        <span class="c"># No selections are applied.</span>
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">selections</span> <span class="o">==</span> <span class="p">[]</span> <span class="ow">or</span> <span class="n">raw_data</span> <span class="p">)</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">scalar</span> <span class="o">=</span> <span class="n">arr</span><span class="o">.</span><span class="n">read</span><span class="p">()</span>
+        <span class="c"># Applying selections and extracting data for selected atoms.</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_use_selections</span><span class="p">()</span>
+            <span class="n">scalar</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">extract</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_mask</span><span class="p">,</span> <span class="n">arr</span><span class="o">.</span><span class="n">read</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">scalar</span>
+</div>
+<div class="viewcode-block" id="Snap.get_vector"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.get_vector">[docs]</a>    <span class="k">def</span> <span class="nf">get_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">comp_names</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Gets and returns atwomwise vector collection</span>
+<span class="sd">        (:class:`numpy.ndarray`, (Nx3)).</span>
+
+<span class="sd">        If ``raw_data`` is ``False`` and :attr:`~Snap.selections` contains</span>
+<span class="sd">        active selections, the data associated with the selected atoms</span>
+<span class="sd">        is returned.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        comp_names : iterable</span>
+<span class="sd">            List of names of scalar vector components in HDF file.</span>
+<span class="sd">        raw_data : boolean, [default=False]</span>
+<span class="sd">            If ``True``, avoids the use of any existing selections.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        vec : :class:`numpy.ndarray`, (Nx3)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">comp_names</span><span class="p">)</span><span class="o">==</span><span class="mi">3</span>
+
+        <span class="k">return</span> <span class="n">vectors</span><span class="o">.</span><span class="n">build_from_scalars</span><span class="p">((</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">)</span>  <span class="p">))</span>
+</div>
+<div class="viewcode-block" id="Snap.get_tensor"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.get_tensor">[docs]</a>    <span class="k">def</span> <span class="nf">get_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">comp_names</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Gets and returns atwomwise tensor collection</span>
+<span class="sd">        (:class:`numpy.ndarray`, (Nx9)).</span>
+
+<span class="sd">        If ``raw_data is False`` and :attr:`~Snap.selections` contains</span>
+<span class="sd">        active selections, the data associated with the selected atoms</span>
+<span class="sd">        is returned.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        comp_names : iterable</span>
+<span class="sd">            List of names of scalar tensor components in HDF file.</span>
+<span class="sd">        raw_data : boolean, [default=False]</span>
+<span class="sd">            Boolean flag, which if `True` avoids the use of any existing</span>
+<span class="sd">            selections.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        tens : :class:`numpy.ndarray`, (Nx9)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">comp_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">9</span>
+
+        <span class="n">tens</span> <span class="o">=</span> <span class="n">tensors</span><span class="o">.</span><span class="n">build_from_scalars</span><span class="p">((</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">6</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">7</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">8</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">)</span>  <span class="p">))</span>
+        <span class="k">return</span> <span class="n">tens</span>
+</div>
+<div class="viewcode-block" id="Snap.get_symm_tensor"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.get_symm_tensor">[docs]</a>    <span class="k">def</span> <span class="nf">get_symm_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">comp_names</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Gets and returns atwomwise symmetric tensor collection</span>
+<span class="sd">        (:class:`numpy.ndarray`, (Nx6)).</span>
+
+<span class="sd">        If ``raw_data is False`` and :attr:`~Snap.selections` contains</span>
+<span class="sd">        active selections, the data associated with the selected atoms</span>
+<span class="sd">        is returned.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        comp_names : iterable</span>
+<span class="sd">            List of names of scalar tensor components in HDF file.</span>
+<span class="sd">        raw_data : boolean, [default=False]</span>
+<span class="sd">            Boolean flag, which if ``True`` avoids the use of any existing</span>
+<span class="sd">            selections.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        symm_tens : :class:`numpy.ndarray`, (Nx6)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">comp_names</span><span class="p">)</span> <span class="o">==</span> <span class="mi">6</span>
+
+        <span class="n">symm_tens</span> <span class="o">=</span> <span class="n">tensors</span><span class="o">.</span><span class="n">build_from_scalars</span><span class="p">((</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">2</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">3</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">4</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">),</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">comp_names</span><span class="p">[</span><span class="mi">5</span><span class="p">],</span> <span class="n">raw_data</span><span class="p">)</span>  <span class="p">))</span>
+        <span class="k">return</span> <span class="n">symm_tens</span>
+
+<span class="c"># =============================================================================</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

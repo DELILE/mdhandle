@@ -1,0 +1,255 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.natsort &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.natsort</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Provides functions for natural string sorting (ie. strings with letters</span>
+<span class="sd">and numbers).</span>
+
+<span class="sd">**Credits**:</span>
+
+<span class="sd">* Seo Sanghyeon</span>
+<span class="sd">* Connelly Barnes</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c"># TODO: Manipulations could be done more smoothly with list list comprehensions</span>
+<span class="c"># in py &gt;=2.5.</span>
+
+<span class="kn">import</span> <span class="nn">re</span>
+<span class="kn">import</span> <span class="nn">copy</span>
+
+<div class="viewcode-block" id="try_int"><a class="viewcode-back" href="../../reference.html#mdhandle.natsort.try_int">[docs]</a><span class="k">def</span> <span class="nf">try_int</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Internal function to :mod:`natsort`.  Called by :func:`natsort_key`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    s : string</span>
+<span class="sd">        String to attempt integer conversion.</span>
+<span class="sd">    Return</span>
+<span class="sd">    ------</span>
+<span class="sd">    s : int or string</span>
+<span class="sd">        Integer of input string if possible.  Otherwise string.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">try</span><span class="p">:</span>
+        <span class="k">return</span> <span class="nb">int</span><span class="p">(</span><span class="n">s</span><span class="p">)</span>
+    <span class="k">except</span><span class="p">:</span>
+        <span class="k">return</span> <span class="n">s</span>
+
+</div>
+<div class="viewcode-block" id="natsort_key"><a class="viewcode-back" href="../../reference.html#mdhandle.natsort.natsort_key">[docs]</a><span class="k">def</span> <span class="nf">natsort_key</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Used internally to get a list by which ``s`` is sorted.</span>
+<span class="sd">    Called by :func:`natcmp`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    x :  string</span>
+<span class="sd">        String to sort.</span>
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    sort_key : list</span>
+<span class="sd">        List used to sort input string.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">sort_key</span> <span class="o">=</span> <span class="nb">map</span><span class="p">(</span><span class="n">try_int</span><span class="p">,</span> <span class="n">re</span><span class="o">.</span><span class="n">findall</span><span class="p">(</span><span class="s">r&#39;(\d+|\D+)&#39;</span><span class="p">,</span> <span class="n">s</span><span class="p">))</span>
+    <span class="k">return</span> <span class="n">sort_key</span>
+
+</div>
+<div class="viewcode-block" id="natcmp"><a class="viewcode-back" href="../../reference.html#mdhandle.natsort.natcmp">[docs]</a><span class="k">def</span> <span class="nf">natcmp</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Natural string comparison. Case sensitive.</span>
+
+<span class="sd">    Acts as replacement to basic Python standard library ``cmp`` for</span>
+<span class="sd">    :func:`natsort`.</span>
+
+<span class="sd">    Called by: :func:`natcasecmp`, :func:`natsort`,</span>
+<span class="sd">    :func:`natsorted`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    a : string</span>
+<span class="sd">        String to be compared with `b` (see Python stdlib `cmp` docs).</span>
+<span class="sd">    b : string</span>
+<span class="sd">        String to be compared with ``a``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    cmp_res : int</span>
+<span class="sd">        Negative if ``a &lt; b``, zero if ``a == b``, positive if ``a &gt; b``.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">return</span> <span class="nb">cmp</span><span class="p">(</span><span class="n">natsort_key</span><span class="p">(</span><span class="n">a</span><span class="p">),</span> <span class="n">natsort_key</span><span class="p">(</span><span class="n">b</span><span class="p">))</span>
+
+</div>
+<div class="viewcode-block" id="natcasecmp"><a class="viewcode-back" href="../../reference.html#mdhandle.natsort.natcasecmp">[docs]</a><span class="k">def</span> <span class="nf">natcasecmp</span><span class="p">(</span><span class="n">a</span><span class="p">,</span> <span class="n">b</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Natural string comparison. Ignores case.</span>
+
+<span class="sd">    Acts as replacement to basic Python standard library ``cmp`` func for</span>
+<span class="sd">    :func:`natsort`.</span>
+
+<span class="sd">    Internal function.</span>
+<span class="sd">    Can act as alternative to :func:`natcmp` with case insensitivity.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    a : string</span>
+<span class="sd">        String to be compared with ``b`` (see Python stdlib ``cmp`` docs).</span>
+<span class="sd">    b : string</span>
+<span class="sd">        String to be compared with ``a``.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    cmp_res : int</span>
+<span class="sd">        Negative if ``a &lt; b``, zero if ``a == b``, positive if ``a &gt; b``.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">cmp_res</span> <span class="o">=</span> <span class="n">natcmp</span><span class="p">(</span><span class="n">a</span><span class="o">.</span><span class="n">lower</span><span class="p">(),</span> <span class="n">b</span><span class="o">.</span><span class="n">lower</span><span class="p">())</span>
+    <span class="k">return</span> <span class="n">cmp_res</span>
+
+</div>
+<div class="viewcode-block" id="natsort"><a class="viewcode-back" href="../../reference.html#mdhandle.natsort.natsort">[docs]</a><span class="k">def</span> <span class="nf">natsort</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="nb">cmp</span><span class="o">=</span><span class="n">natcmp</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Sorts input list or tuple *in place*.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    seq : list or tuple</span>
+<span class="sd">        List of strings to be sorted.</span>
+<span class="sd">    cmp : function, [default = :func:`natcmp`]</span>
+<span class="sd">        Function used to perform comparison.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">seq</span><span class="o">.</span><span class="n">sort</span><span class="p">(</span><span class="nb">cmp</span><span class="p">)</span>
+
+</div>
+<div class="viewcode-block" id="natsorted"><a class="viewcode-back" href="../../reference.html#mdhandle.natsort.natsorted">[docs]</a><span class="k">def</span> <span class="nf">natsorted</span><span class="p">(</span><span class="n">seq</span><span class="p">,</span> <span class="nb">cmp</span><span class="o">=</span><span class="n">natcmp</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Sorts input list or tuple as in :func:`natsort`, but returns a *copy*</span>
+<span class="sd">    of original data rather than sorting in place.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    seq : list or tuple</span>
+<span class="sd">        List of strings to be sorted.</span>
+<span class="sd">    cmp : function [default=:func:`natcmp`]</span>
+<span class="sd">        Function used to perform comparison.</span>
+
+<span class="sd">     Returns</span>
+<span class="sd">     -------</span>
+<span class="sd">     temp : list</span>
+<span class="sd">        A copy of ``seq``, sorted by natural string sort :func:`natsort`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">temp</span> <span class="o">=</span> <span class="n">copy</span><span class="o">.</span><span class="n">copy</span><span class="p">(</span><span class="n">seq</span><span class="p">)</span>
+    <span class="n">natsort</span><span class="p">(</span><span class="n">temp</span><span class="p">,</span> <span class="nb">cmp</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">temp</span>
+
+
+<span class="c">#=============================================================================</span>
+
+</div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">main</span><span class="p">()</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

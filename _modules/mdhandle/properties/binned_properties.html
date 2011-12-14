@@ -1,0 +1,1260 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.properties.binned_properties &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="up" title="mdhandle.properties" href="../properties.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../properties.html" accesskey="U">mdhandle.properties</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.properties.binned_properties</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Calculate average quantities on grid from atomiwise values.</span>
+<span class="sd">(e.g. local streaming velocity, local temperature)</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">abc</span>
+<span class="kn">from</span> <span class="nn">math</span> <span class="kn">import</span> <span class="n">fsum</span>
+<span class="kn">import</span> <span class="nn">inspect</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="kn">import</span> <span class="nn">mdhandle.utilities</span> <span class="kn">as</span> <span class="nn">util</span>
+<span class="kn">import</span> <span class="nn">mdhandle.vectors</span> <span class="kn">as</span> <span class="nn">vectors</span>
+<span class="kn">import</span> <span class="nn">mdhandle.units</span> <span class="kn">as</span> <span class="nn">units</span>
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">settings</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="c"># TODO: Cylindrical or spherical grids.</span>
+<span class="c"># TODO: Grid manipulations (refinement)</span>
+<span class="c"># TODO: Rectalinear grid with variation along coordinate directions.</span>
+<span class="c"># TODO: Grids that are not aligned to XYZ coordinate directions.</span>
+<span class="c"># TODO: Change Grid.add_new_calc(...) so not manually monkeypatching</span>
+<span class="c">#       new calculation implemenation.</span>
+<span class="c"># TODO: Edit docs to ensure that user knows how to sub-class Grid</span>
+<span class="c">#       (i.e. what is required of mapping functions), and how to implement</span>
+<span class="c">#       a calculation function.</span>
+<span class="c"># TODO: Refactor abstract class so more elegant.</span>
+<span class="c">#       - Currentl abstract method: mapping_func, and also require</span>
+<span class="c">#         definition of</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="k">def</span> <span class="nf">get_implemented_grids</span><span class="p">():</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Get the names of grid types implemented (i.e. sub-classes of :class:`Grid`</span>
+<span class="sd">    class).</span>
+
+<span class="sd">    Taken from the :attr:`Grid.grid_type` properties in subclasses of</span>
+<span class="sd">    :class:`Grid`.</span>
+
+<span class="sd">    &#39;atoms&#39; is the default grid type for an atomwise dataset.</span>
+
+<span class="sd">    Returns</span>
+<span class="sd">    --------</span>
+<span class="sd">    implemented_grids : list</span>
+<span class="sd">        List of strings for implemented grid type.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># TODO: Handling new grids implemented later by other users.</span>
+    <span class="n">current_mod</span> <span class="o">=</span> <span class="n">sys</span><span class="o">.</span><span class="n">modules</span><span class="p">[</span><span class="n">__name__</span><span class="p">]</span>
+    <span class="n">implemented_grids</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;atoms&#39;</span><span class="p">]</span>
+    <span class="k">for</span> <span class="n">name</span><span class="p">,</span> <span class="n">obj</span> <span class="ow">in</span> <span class="n">inspect</span><span class="o">.</span><span class="n">getmembers</span><span class="p">(</span><span class="n">current_mod</span><span class="p">,</span> <span class="n">inspect</span><span class="o">.</span><span class="n">isclass</span><span class="p">):</span>
+        <span class="k">if</span> <span class="nb">issubclass</span><span class="p">(</span><span class="n">obj</span><span class="p">,</span> <span class="n">Grid</span><span class="p">)</span> <span class="ow">and</span> <span class="p">(</span><span class="n">obj</span> <span class="ow">is</span> <span class="ow">not</span> <span class="n">Grid</span><span class="p">):</span>
+            <span class="n">implemented_grids</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">obj</span><span class="o">.</span><span class="n">grid_type</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">implemented_grids</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+<span class="c">#                       Grid Objects</span>
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="Grid"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid">[docs]</a><span class="k">class</span> <span class="nc">Grid</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Abstract grid class.</span>
+
+<span class="sd">    Intent is to provide a useful base class for other grid types to inherit</span>
+<span class="sd">    as the property calculations are not dependent on the grid type or the</span>
+<span class="sd">    mapping function.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Snap for calculating binned properties.</span>
+<span class="sd">        Current data set in snap should be atomwise data</span>
+<span class="sd">        (e.g. ``&#39;rawSimResults&#39;``)</span>
+<span class="sd">    calcs : iterable, [default=None]</span>
+<span class="sd">        List of calculations to perform on the grid.</span>
+<span class="sd">        If ``calcs is None``, then all existing calculations are performed.</span>
+<span class="sd">        Existing calculations :</span>
+<span class="sd">            ``[&#39;count&#39;, &#39;num_density&#39;, &#39;mass&#39;, &#39;mass_density&#39;,``</span>
+<span class="sd">            ``&#39;epair_specific&#39;, &#39;coord_specific&#39;, &#39;velocity&#39;,``</span>
+<span class="sd">            ``&#39;ke_specific&#39;, &#39;force_specific&#39;, &#39;temp&#39;, &#39;stress&#39;]``</span>
+<span class="sd">    wrap : boolean, [default=True]</span>
+<span class="sd">        If ``True``, coordinates in active data set in snap are</span>
+<span class="sd">        wrapped to the central simulation cell subject to PBC.</span>
+<span class="sd">    selection : boolean, [default=True]</span>
+<span class="sd">        If ``True``, selections are applied to snap object when getting</span>
+<span class="sd">        atom coordinates.</span>
+<span class="sd">    location : string, [default=&#39;Node&#39;]</span>
+<span class="sd">        Grid location of calculated values.</span>
+<span class="sd">        {&#39;Node&#39; } ``&#39;Cell&#39;`` location not currently implemented.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Snap object.</span>
+<span class="sd">    use_selection : boolean</span>
+<span class="sd">        If ``True``, any selections in :attr:`Grid.snap` are used.</span>
+<span class="sd">    atom_xyz : :class:`numpy.ndarray`</span>
+<span class="sd">        Atomic positions for atoms in :attr:`Grid.snap`.</span>
+<span class="sd">    calcs : iterable</span>
+<span class="sd">        List of calculation names (strings) to perform.</span>
+<span class="sd">    to_calc : dict</span>
+<span class="sd">        List of calculations to do via :meth:`Grid.run_calc` and metadata.</span>
+<span class="sd">    scalars : dict</span>
+<span class="sd">        List of scalars produced by grid calcs.</span>
+<span class="sd">    vectors : dict</span>
+<span class="sd">        List of vectors produced by grid calcs.</span>
+<span class="sd">    tensors : dict</span>
+<span class="sd">        List of tensors produced by grid calcs.</span>
+<span class="sd">    symm_tensors : dict</span>
+<span class="sd">        List of symmetric tensors produced by grid calcs.</span>
+<span class="sd">    dtypes : dict</span>
+<span class="sd">        dtype of data produced by grid calcs</span>
+<span class="sd">    locations : dict</span>
+<span class="sd">        Location of data produced by grid calcs</span>
+<span class="sd">    types : dict</span>
+<span class="sd">        Type of output produced by grid calcs</span>
+<span class="sd">    bins : dict</span>
+<span class="sd">        Dictionary storing result of sparse atoms-to-grid mapping.</span>
+<span class="sd">    grid_to_atom : :class:`numpy.ndarray`</span>
+<span class="sd">        Stores grid cells for each atom in the :attr:`Grid.snap`.</span>
+<span class="sd">    elem_volume : float</span>
+<span class="sd">        Abstract property - volume of grid element.</span>
+<span class="sd">    num_elem : :class:`numpy.ndarray`</span>
+<span class="sd">        Abstract property - number of grid elements.</span>
+<span class="sd">    grid_type : string</span>
+<span class="sd">        Abstract property - Name of grid type (e.g. &#39;3DRegular&#39;)</span>
+<span class="sd">    _KBOLTZ : float</span>
+<span class="sd">        Boltzmann constant in units consistent with :attr:`Grid.snap`.</span>
+<span class="sd">    _all_calcs : dict</span>
+<span class="sd">        List of all implemented grid calculations.</span>
+<span class="sd">    _run_once : dict</span>
+<span class="sd">        If values are true - then grid calculation has been run.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    ------</span>
+
+<span class="sd">    * Each grid calculation (``_calc_NAME()``) stores its result in </span>
+<span class="sd">      :class:`Grid` attribute with name matching name in :attr:`Grid.to_calc`.</span>
+<span class="sd">    * See :meth:`RectGrid._mapping_ngp` or :meth:`RectGrid._mapping_cic`</span>
+<span class="sd">      for basic requirements of a mapping function.</span>
+<span class="sd">    * Abstract methods and properties are dependent on the specific and </span>
+<span class="sd">      concrete grid implemenation.</span>
+<span class="sd">     * Grid calculation shouldonly be run once per intance of :class:`Grid`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="n">__metaclass__</span> <span class="o">=</span> <span class="n">abc</span><span class="o">.</span><span class="n">ABCMeta</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">wrap</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">use_selection</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                                                    <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span> <span class="o">=</span> <span class="n">snap</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="s">&#39;atoms&#39;</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&quot;Snap dataset must be of type &#39;atoms&#39;&quot;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span> <span class="o">=</span> <span class="n">calcs</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span> <span class="o">=</span> <span class="n">use_selection</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_KBOLTZ</span> <span class="o">=</span> <span class="n">units</span><span class="o">.</span><span class="n">KBOLTZ</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">]]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">atom_xyz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">(</span> <span class="p">(</span><span class="s">&#39;x&#39;</span><span class="p">,</span> <span class="s">&#39;y&#39;</span><span class="p">,</span> <span class="s">&#39;z&#39;</span><span class="p">),</span>
+                                              <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">)</span> <span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">wrap</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">atom_xyz</span> <span class="o">=</span> <span class="n">snap</span><span class="o">.</span><span class="n">sim_cell</span><span class="o">.</span><span class="n">wrap_to_central</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">atom_xyz</span><span class="p">)</span>
+
+        <span class="c"># Setting up for binning calculation</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">bins</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="c"># Existing calculations</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;num_density&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;mass&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
+                                  <span class="n">atomwise_name</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;mass&#39;</span><span class="p">:</span> <span class="s">&#39;mass&#39;</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;mass_density&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;epair_count&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
+                                         <span class="n">atomwise_name</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;epair&#39;</span><span class="p">:</span> <span class="s">&#39;epair&#39;</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;coord_count&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
+                                         <span class="n">atomwise_name</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;coord&#39;</span><span class="p">:</span> <span class="s">&#39;coord&#39;</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;velocity&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
+                                      <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;vectors&#39;</span><span class="p">,</span>
+                                      <span class="n">atomwise_name</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;velocity&#39;</span><span class="p">:</span> <span class="s">&#39;velocity&#39;</span><span class="p">,</span>
+                                                     <span class="s">&#39;mass&#39;</span><span class="p">:</span> <span class="s">&#39;mass&#39;</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;ke_count&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
+                                      <span class="n">atomwise_name</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;ke&#39;</span><span class="p">:</span> <span class="s">&#39;ke&#39;</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;force_count&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
+                                         <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;vectors&#39;</span><span class="p">,</span>
+                                         <span class="n">atomwise_name</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;force&#39;</span><span class="p">:</span> <span class="s">&#39;force&#39;</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;temp&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
+                                  <span class="n">atomwise_name</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;velocity&#39;</span><span class="p">:</span> <span class="s">&#39;velocity&#39;</span><span class="p">,</span>
+                                                 <span class="s">&#39;mass&#39;</span><span class="p">:</span> <span class="s">&#39;mass&#39;</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;temp_uncorr&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
+                                         <span class="n">atomwise_name</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;velocity&#39;</span><span class="p">:</span> <span class="s">&#39;velocity&#39;</span><span class="p">,</span>
+                                                        <span class="s">&#39;mass&#39;</span><span class="p">:</span> <span class="s">&#39;mass&#39;</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;stress&#39;</span><span class="p">,</span> <span class="n">location</span><span class="o">=</span><span class="n">location</span><span class="p">,</span>
+                                    <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;symm_tensors&#39;</span><span class="p">,</span>
+                                    <span class="n">atomwise_name</span><span class="o">=</span><span class="p">{</span><span class="s">&#39;stress&#39;</span><span class="p">:</span> <span class="s">&#39;stress&#39;</span><span class="p">})</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">scalars</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vectors</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">types</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtypes</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="p">{}</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">coverage</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_atoms</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_run_once</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;run_binning&#39;</span><span class="p">:</span> <span class="bp">False</span><span class="p">,</span>
+                          <span class="s">&#39;run_calc&#39;</span><span class="p">:</span> <span class="bp">False</span><span class="p">}</span>
+
+        <span class="c"># Do not call setup_calculations in abstrct Grid class</span>
+        <span class="c"># because setup may rely on details of concrete class</span>
+        <span class="c"># implementation.  Should call within concrete class __init__().</span>
+
+    <span class="nd">@abc.abstractmethod</span>
+    <span class="k">def</span> <span class="nf">mapping_func</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+    
+    <span class="nd">@abc.abstractproperty</span>
+    <span class="k">def</span> <span class="nf">grid_type</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+    
+    <span class="nd">@abc.abstractproperty</span>
+    <span class="k">def</span> <span class="nf">elem_volume</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+    <span class="nd">@abc.abstractproperty</span>
+    <span class="k">def</span> <span class="nf">num_elem</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">pass</span>
+
+
+<div class="viewcode-block" id="Grid.set_mapping_function"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid.set_mapping_function">[docs]</a>    <span class="k">def</span> <span class="nf">set_mapping_function</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of mapping function.</span>
+<span class="sd">            Must match method within grid class</span>
+<span class="sd">            (e.g. ``GridClass._mapping_NAME()``):</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="p">(</span><span class="s">&#39;_mapping_&#39;</span> <span class="o">+</span> <span class="n">name</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">dir</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mapping_func</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s">&#39;_mapping_&#39;</span> <span class="o">+</span> <span class="n">name</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Mapping function </span><span class="si">%s</span><span class="s"> does not exist&#39;</span> <span class="o">%</span> <span class="n">name</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="Grid.add_new_calc"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid.add_new_calc">[docs]</a>    <span class="k">def</span> <span class="nf">add_new_calc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">calc_name</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;scalars&#39;</span><span class="p">,</span>
+                                      <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">,</span> <span class="n">atomwise_name</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds metadata about the output of a new calculation type beyond the</span>
+<span class="sd">        default set.</span>
+
+<span class="sd">        Implementation of new calculation is done by manually monkeypatching</span>
+<span class="sd">        function with name in style ``_calc_NAME(...)`` into existing object.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        calc_name : string</span>
+<span class="sd">            Name of calculation.</span>
+<span class="sd">        dtype : string, {&#39;int&#39; | &#39;float&#39;}, [default=&#39;float&#39;]</span>
+<span class="sd">            Data type for calculation.</span>
+<span class="sd">        collection_type : string, [default=&#39;scalars&#39;]</span>
+<span class="sd">            Defines the shape of the output (i.e. vectors: Nx3)</span>
+<span class="sd">            {&#39;scalars&#39; | &#39;vectors&#39; | &#39;tensors&#39; | &#39;symm_tensors&#39;}</span>
+<span class="sd">        location : string, [default=&#39;Node&#39;]</span>
+<span class="sd">            Grid location of calculated values.</span>
+<span class="sd">            {&#39;Node&#39;} ``&#39;Cell&#39;`` location not currently implemented.</span>
+<span class="sd">        atomwise_name : dict, [default=None]</span>
+<span class="sd">            Name of atomwise property associated with grid calculation to</span>
+<span class="sd">            allow for variation in the name stored for propety in</span>
+<span class="sd">            :attr:`Grid.snap`. Each ``dict`` entry is formatted as:</span>
+<span class="sd">        </span>
+<span class="sd">            ``&#39;identifying_name&#39;:&#39;name_in_snap&#39;``</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+        <span class="n">collection_type</span> <span class="o">=</span> <span class="n">collection_type</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">dtype</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">DTYPES</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&quot;dtype must be &#39;int&#39; or &#39;float&#39;, </span><span class="si">%s</span><span class="s"> given&quot;</span> <span class="o">%</span> <span class="n">dtype</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">collection_type</span> <span class="ow">not</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">PROP_SIZE</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;collection_type </span><span class="si">%s</span><span class="s"> does not exist.&#39;</span>
+                                                            <span class="o">%</span> <span class="n">collection_type</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">if</span> <span class="n">location</span> <span class="o">!=</span> <span class="s">&#39;Node&#39;</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&quot;Location must be set to &#39;Node&#39;&quot;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">calc_name</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">calc_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;dtype&#39;</span><span class="p">:</span> <span class="n">dtype</span><span class="p">,</span> <span class="s">&#39;location&#39;</span><span class="p">:</span> <span class="n">location</span><span class="p">,</span>
+                                      <span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="n">collection_type</span><span class="p">,</span>
+                                      <span class="s">&#39;atomwise_name&#39;</span><span class="p">:</span> <span class="n">atomwise_name</span><span class="p">}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup_calculations</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="Grid.setup_calculations"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid.setup_calculations">[docs]</a>    <span class="k">def</span> <span class="nf">setup_calculations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Configures list of calculations to performs and list of scalars</span>
+<span class="sd">        (:attr:`Grid.scalars`), vectors (:attr:`Grid.vectors`), tensors</span>
+<span class="sd">        (:attr:`Grid.tensors`) and symmetric tensors</span>
+<span class="sd">        (:attr:`Grid.symm_tensors`).</span>
+
+<span class="sd">        Moves requested calculations from :attr:`Grid.calcs` to</span>
+<span class="sd">        :attr:`Grid.to_calc` so can be used by :meth:`Grid.run_calc`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Logic for default calcs == None --&gt; selecting all possible calcs</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span> <span class="o">=</span> <span class="p">[</span><span class="n">i</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">]</span>
+            <span class="n">to_loop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="n">to_loop</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">calcs</span>
+
+        <span class="c"># Assining items to be calculated.</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">to_loop</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+            <span class="k">if</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;scalars&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">scalars</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;vectors&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">vectors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;tensors&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+            <span class="k">elif</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;symm_tensors&#39;</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+
+        <span class="c"># Human readable.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dtypes</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">dtypes</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">]</span>
+
+        <span class="c"># Human readable.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">locations</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;location&#39;</span><span class="p">]</span>
+
+        <span class="c"># Human readable.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">types</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">types</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;type&#39;</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">results</span> <span class="o">=</span> <span class="p">{}</span>
+</div>
+<div class="viewcode-block" id="Grid.change_default_name"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid.change_default_name">[docs]</a>    <span class="k">def</span> <span class="nf">change_default_name</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">calc_name</span><span class="p">,</span> 
+                                  <span class="n">identifying_name</span><span class="p">,</span> <span class="n">new_atomwise_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Changes the default name of atomwise property used in calculation.</span>
+<span class="sd">        (e.g. ``&#39;epair&#39;`` is default for potential energy, but could be</span>
+<span class="sd">        ``&#39;c_epair&#39;`` depending on LAMMPS configuration).</span>
+
+<span class="sd">        See :attr:`Grid._all_calcs` for defaults.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        calc_name : string</span>
+<span class="sd">            Name of grid calculation.</span>
+<span class="sd">        identifying_name : string</span>
+<span class="sd">            Identifying name for atomwise property (i.e. &#39;velocity&#39;).</span>
+<span class="sd">            This may not correspond with the name stored in </span>
+<span class="sd">            :attr:`Grid.snap`.</span>
+<span class="sd">        new_atomwise_name : string</span>
+<span class="sd">            New name for related atomwise property.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">calc_name</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="n">identifying_name</span><span class="p">]</span> <span class="o">=</span> \
+                                                              <span class="n">new_atomwise_name</span>
+
+    <span class="c"># ---------------- RUNNING BINNING ----------------------------------------</span>
+</div>
+<div class="viewcode-block" id="Grid.run_mapping"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid.run_mapping">[docs]</a>    <span class="k">def</span> <span class="nf">run_mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Performs atom-to-grid mapping according to</span>
+<span class="sd">        :meth:`Grid.mapping_func`.</span>
+
+<span class="sd">        The result of mapping is stored in :attr:`Grid.bins`.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">           This method must be called before :meth:`Grid.run_calc`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_once</span><span class="p">[</span><span class="s">&#39;run_mapping&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Grid calculation cannot be run more than once.&#39;</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_run_once</span><span class="p">[</span><span class="s">&#39;run_mapping&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">mapping_func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="Grid.run_calc"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid.run_calc">[docs]</a>    <span class="k">def</span> <span class="nf">run_calc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Systematically calls all grid calculation functions, ``calc_NAME()``</span>
+<span class="sd">        as listed in :attr:`Grid.to_calc`.</span>
+
+<span class="sd">        The result of each calculation is stored in :attr:`Grid.results`</span>
+<span class="sd">        dictionary and in a :class:`Grid` attribute with with the name</span>
+<span class="sd">        corresponding to the name in :attr:`Grid.to_calc`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_once</span><span class="p">[</span><span class="s">&#39;run_calc&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Grid calculation cannot be run more than once.&#39;</span><span class="p">)</span>
+        
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">bins</span> <span class="o">==</span> <span class="p">{}:</span>
+                <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Atom-to-grid mapping must be done first.&#39;</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">calc_name</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">:</span>
+                <span class="c"># Skipping calculation if it already exists.</span>
+                <span class="k">if</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">calc_name</span><span class="p">):</span>
+                    <span class="k">continue</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c"># Storing the result in self.results and self.calc_name.</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">calc_name</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> 
+                                                      <span class="s">&#39;_calc_&#39;</span> <span class="o">+</span> <span class="n">calc_name</span><span class="p">)()</span>
+                    <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">calc_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">calc_name</span><span class="p">])</span>
+
+    <span class="c"># --------------- CALCULATION UTILITY FUNCTIONS --------------------------</span>
+</div>
+<div class="viewcode-block" id="Grid._requirements"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._requirements">[docs]</a>    <span class="k">def</span> <span class="nf">_requirements</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="o">*</span><span class="n">list_reqs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Determines if gridded property exists and if not calculates it.</span>
+
+<span class="sd">        Used in grid calculations that are dependent on existence of other</span>
+<span class="sd">        grid calculations.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        *list_reqs: strings</span>
+<span class="sd">            Names of required grid properties.  The name should match the</span>
+<span class="sd">            grid properties attribute name (e.g. &#39;epair&#39; for `Grid.epair`).</span>
+<span class="sd">            Can supply many requirements as comma sparated arguments.</span>
+<span class="sd">            (e.g. ``&#39;count&#39;, &#39;epair&#39;``).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">req</span> <span class="ow">in</span> <span class="n">list_reqs</span><span class="p">:</span>
+            <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">):</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">req</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s">&#39;calc_&#39;</span> <span class="o">+</span> <span class="n">req</span><span class="p">)()</span>
+                <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">req</span><span class="p">])</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">continue</span>
+</div>
+<div class="viewcode-block" id="Grid._reverse_mapping"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._reverse_mapping">[docs]</a>    <span class="k">def</span> <span class="nf">_reverse_mapping</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">grid_value</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Performs grid-to-atom mapping of ``grid_value``.</span>
+
+<span class="sd">        Uses mapping information stored in :attr:`Grid.grid_to_atoms` when</span>
+<span class="sd">        atom-to-grid mapping is originally performed.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        grid_value : array-like or float</span>
+<span class="sd">            Gridded data array.  If a constant ``float`` is given, each atom is</span>
+<span class="sd">            assigned the constant value.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        atom_value : :class:`numpy.ndarray`</span>
+<span class="sd">            Atomwise array resulting from grid-to-atom mapping of</span>
+<span class="sd">            ``grid_value``.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Defining helper function to get atom values</span>
+        <span class="c"># back from grid_value.</span>
+        <span class="nd">@np.vectorize</span>
+        <span class="k">def</span> <span class="nf">get_total_weighting</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">weights</span><span class="p">):</span>
+            <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">            Calculates the weighted average of grid values</span>
+<span class="sd">            from all grid points that an individual atom contributes</span>
+<span class="sd">            to.</span>
+
+<span class="sd">            ``@np.vectorize`` decorator produces a ``numpy.ufunc`` which</span>
+<span class="sd">            operates over array inputs without looping.</span>
+
+<span class="sd">            Parameters</span>
+<span class="sd">            -----------</span>
+<span class="sd">            idx : array-like, (Nx1)</span>
+<span class="sd">                Numpy array containing a list of index tuples</span>
+<span class="sd">                (i.e. ``(1,1,1)``) for each atom.</span>
+<span class="sd">            weights : array-like (Nx1)</span>
+<span class="sd">                Numpy array containing list of weights (i.e. [0.9, 0.6])</span>
+<span class="sd">                for each atom.</span>
+
+<span class="sd">            Returns</span>
+<span class="sd">            -------</span>
+<span class="sd">            weighted_avg : :class:`numpy.ndarray` (Nx1)</span>
+<span class="sd">                Weighted average of `grid_value` for each atom based</span>
+<span class="sd">                on atomic contributions at all grid points given the</span>
+<span class="sd">                :meth:`Grid.mapping_func`.</span>
+
+<span class="sd">            &quot;&quot;&quot;</span>
+            <span class="k">if</span> <span class="n">idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">total</span> <span class="o">=</span> <span class="n">fsum</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
+                <span class="n">prod</span> <span class="o">=</span> <span class="n">fsum</span><span class="p">([</span><span class="n">grid_value</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">*</span><span class="n">w</span> <span class="k">for</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">weights</span><span class="p">)])</span>
+                <span class="k">return</span> <span class="n">prod</span> <span class="o">/</span> <span class="n">total</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">return</span> <span class="mf">0.0</span>
+
+        <span class="n">atom_value</span> <span class="o">=</span> <span class="n">get_total_weighting</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span>
+                                         <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">return</span> <span class="n">atom_value</span>
+</div>
+<div class="viewcode-block" id="Grid._sum_from_atom_value"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._sum_from_atom_value">[docs]</a>    <span class="k">def</span> <span class="nf">_sum_from_atom_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atom_value</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Perform summation of atomwise values on the grid for arbitrary</span>
+<span class="sd">        atomwise data (``atom_value``).</span>
+
+<span class="sd">        Utility function used in other grid calculations, ``_calc_mass()``.</span>
+
+<span class="sd">        For example, to count the number of atoms at the gird points</span>
+<span class="sd">        (or grid cells), :meth:`Grid._sum_from_atom_value(1.0)` or to</span>
+<span class="sd">        calculate the mass of each grid point,</span>
+<span class="sd">        :meth:`Grid._sum_from_atom_value(atom_masses)`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        atom_value : array-like or float</span>
+<span class="sd">            Atomwise data object to be summed according to grid weighting at</span>
+<span class="sd">            each grid point or cell.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Add special case for temp, which is active when</span>
+        <span class="c"># Flag (to be added) is thrown asking for velocity correction to</span>
+        <span class="c"># be used.</span>
+
+        <span class="c"># atom_value is a scalar, constant across all atoms</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">atom_value</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">):</span>
+
+            <span class="n">gridded_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_elem</span><span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">bin0</span><span class="p">,</span> <span class="n">contents</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">bins</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+                <span class="n">gridded_value</span><span class="p">[</span><span class="n">bin0</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">bin0</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">bin0</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span> <span class="o">=</span> \
+                                    <span class="n">atom_value</span><span class="o">*</span><span class="n">fsum</span><span class="p">(</span><span class="n">contents</span><span class="p">[</span><span class="s">&#39;weights&#39;</span><span class="p">])</span>
+            <span class="k">return</span> <span class="n">gridded_value</span>
+
+        <span class="c"># atom_value varies over atoms</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="k">if</span> <span class="n">atom_value</span><span class="o">.</span><span class="n">ndim</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+                <span class="n">gridded_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">num_elem</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">individual_size</span> <span class="o">=</span> <span class="n">atom_value</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+                <span class="n">gridded_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_elem</span><span class="p">,</span>
+                                <span class="n">dtype</span><span class="o">=</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">,</span> <span class="p">(</span><span class="n">individual_size</span><span class="p">,))</span>  <span class="p">)</span>
+
+            <span class="k">for</span> <span class="n">bin0</span><span class="p">,</span> <span class="n">contents</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">bins</span><span class="o">.</span><span class="n">iteritems</span><span class="p">():</span>
+                <span class="n">gridded_value</span><span class="p">[</span><span class="n">bin0</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">bin0</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span> <span class="n">bin0</span><span class="p">[</span><span class="mi">2</span><span class="p">]]</span> <span class="o">=</span> \
+                    <span class="p">(</span><span class="n">atom_value</span><span class="p">[</span><span class="nb">list</span><span class="p">(</span><span class="n">contents</span><span class="p">[</span><span class="s">&#39;atoms&#39;</span><span class="p">])]</span><span class="o">.</span><span class="n">T</span> <span class="o">*</span>
+                                     <span class="n">contents</span><span class="p">[</span><span class="s">&#39;weights&#39;</span><span class="p">])</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">gridded_value</span>
+
+    <span class="c"># --------------- SPECIFIC GRID CALCULATIONS ------------------------------</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_count"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_count">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_count</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculate the atom count on grid.</span>
+
+<span class="sd">        Also calls tests on grid coverage: :meth:`Grid._calc_coverage`.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        count : :class:`numpy.ndarray`</span>
+<span class="sd">            Number of atoms at each grid point.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;count&#39;]` and :attr:`Grid.count`</span>
+<span class="sd">            in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+
+        <span class="c"># Call _coverage() and _coverage()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_coverage</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_num_atoms</span><span class="p">()</span>
+        <span class="k">return</span> <span class="n">count</span>
+</div>
+<div class="viewcode-block" id="Grid._num_atoms"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._num_atoms">[docs]</a>    <span class="k">def</span> <span class="nf">_num_atoms</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the total number of atoms on grid.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">           The result, stored in :attr:`Grid.num_atoms`, is not a grid array </span>
+<span class="sd">           and is not  stored in :attr:`Grid.coverage.results`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_atoms</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span><span class="o">.</span><span class="n">sum</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="Grid._coverage"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._coverage">[docs]</a>    <span class="k">def</span> <span class="nf">_coverage</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Test whether atom count on the grid captures all atoms</span>
+<span class="sd">        in the snap by comparing to number of atoms in</span>
+<span class="sd">        :attr:`Grid.snap` (i.e. metadata stored on disk).</span>
+
+<span class="sd">        The result is ``True`` if the number of atoms in grid is equal to the</span>
+<span class="sd">        total number of atoms in the snap.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">           The result, stored in :attr:`Grid.coverage`, is not a grid array and</span>
+<span class="sd">           is not  stored in :attr:`Grid.results`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_num_atoms</span><span class="p">()</span>
+
+        <span class="c"># Comparing total number of atoms</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_atoms</span> <span class="o">==</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">]:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coverage</span> <span class="o">=</span> <span class="bp">True</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">coverage</span> <span class="o">=</span> <span class="bp">False</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_num_density"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_num_density">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_num_density</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the gridded number density.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        num_density : :class:`numpy.ndarray`</span>
+<span class="sd">            Number density at each grid point.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;num_density&#39;]` and</span>
+<span class="sd">            :attr:`Grid.num_density` in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">)</span>
+        <span class="n">num_density</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">elem_volume</span>
+        <span class="k">return</span> <span class="n">num_density</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_mass"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_mass">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_mass</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the mass of at each grid point (or grid cell).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        mass : :class:`numpy.ndarray`</span>
+<span class="sd">            Mass at each grid point or grid cell.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;mass&#39;]` and :attr:`Grid.mass`</span>
+<span class="sd">            in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">mass_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;mass&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;mass&#39;</span><span class="p">]</span>
+        <span class="n">mass</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">mass_name</span><span class="p">,</span>
+                                                <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span> <span class="p">)</span>
+        <span class="k">return</span> <span class="n">mass</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_mass_density"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_mass_density">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_mass_density</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates mass density at each grid point (or grid cell).</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        mass_density : :class:`numpy.ndarray`</span>
+<span class="sd">            Mass density at on the grid.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;mass_density&#39;]` and</span>
+<span class="sd">            :attr:`Grid.mass_density` in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;mass&#39;</span><span class="p">)</span>
+        <span class="n">mass_density</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">elem_volume</span>
+        <span class="k">return</span> <span class="n">mass_density</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_epair_count"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_epair_count">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_epair_count</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the potential energy normalized by atom count on the grid.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        epair_count : :class:`numpy.ndarray`</span>
+<span class="sd">            Specific potential energy normalized by atom count on the grid.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;epair_count&#39;]` and</span>
+<span class="sd">            :attr:`Grid.epair_count` in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">)</span>
+        <span class="n">epair_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;epair&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;epair&#39;</span><span class="p">]</span>
+
+        <span class="n">epair_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">epair_name</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span>
+                                                <span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span>
+        <span class="n">util</span><span class="o">.</span><span class="n">clean</span><span class="p">(</span><span class="n">epair_count</span><span class="p">,</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">epair_count</span><span class="p">),</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">epair_count</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_coord_count"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_coord_count">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_coord_count</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the coordintion number normalized by atom count on the grid.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        coord_count : :class:`numpy.ndarray`</span>
+<span class="sd">            Coordination number normalized by atom count on the grid.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;coord_count&#39;]` and</span>
+<span class="sd">            :attr:`Grid.coord_count` in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">)</span>
+        <span class="n">coord_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;coord&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;coord&#39;</span><span class="p">]</span>
+
+        <span class="n">coord_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span>
+                  <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">coord_name</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span>
+                                               <span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span>
+        <span class="n">util</span><span class="o">.</span><span class="n">clean</span><span class="p">(</span><span class="n">coord_count</span><span class="p">,</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">coord_count</span><span class="p">),</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">coord_count</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_velocity"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_velocity">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_velocity</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the streaming velocity on the grid.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        velocity : :class:`numpy.ndarray`</span>
+<span class="sd">            Streaming velocity on the grid.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;velocity&#39;]` and</span>
+<span class="sd">            :attr:`Grid.velocity` in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;mass&#39;</span><span class="p">)</span>
+        <span class="n">vel_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;velocity&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;velocity&#39;</span><span class="p">]</span>
+        <span class="n">vel_comps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">vectors</span><span class="p">[</span><span class="n">vel_name</span><span class="p">][</span><span class="s">&#39;comps&#39;</span><span class="p">]</span>
+
+        <span class="n">mass_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;mass&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;mass&#39;</span><span class="p">]</span>
+
+        <span class="n">velocity</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span>
+             <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">(</span><span class="n">vel_comps</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span><span class="o">.</span><span class="n">T</span>
+             <span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">mass_name</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">)))</span><span class="o">.</span><span class="n">T</span>
+                                             <span class="p">)</span><span class="o">.</span><span class="n">T</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">util</span><span class="o">.</span><span class="n">clean</span><span class="p">(</span><span class="n">velocity</span><span class="p">,</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">velocity</span><span class="p">),</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">velocity</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_ke_count"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_ke_count">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_ke_count</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the gridded kinetic energy normalized by the atom count.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        ke_count : :class:`numpy.ndarray`</span>
+<span class="sd">            Gridded kinetic energy normalized by atom count.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;ke_count&#39;]` and</span>
+<span class="sd">            :attr:`Grid.ke_count` in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">)</span>
+        <span class="n">ke_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;ke_count&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;ke&#39;</span><span class="p">]</span>
+
+        <span class="n">ke_count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span>
+                     <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">ke_name</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span>
+                                            <span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span>
+        <span class="n">util</span><span class="o">.</span><span class="n">clean</span><span class="p">(</span><span class="n">ke_count</span><span class="p">,</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">ke_count</span><span class="p">),</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">ke_count</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_force_count"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_force_count">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_force_count</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates gridded net force normalized by the atom count.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        force_count : :class:`numpy.ndarray`</span>
+<span class="sd">            Gridded net force normalized by atom count.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;force_count&#39;]` and</span>
+<span class="sd">            :attr:`Grid.force_count` in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">)</span>
+        <span class="n">force_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;force_count&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;force&#39;</span><span class="p">]</span>
+        <span class="n">force_comps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">vectors</span><span class="p">[</span><span class="n">force_name</span><span class="p">][</span><span class="s">&#39;comps&#39;</span><span class="p">]</span>
+
+        <span class="n">force_count</span> <span class="o">=</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span>
+               <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">(</span><span class="n">force_comps</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">)))</span><span class="o">.</span><span class="n">T</span>
+               <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">T</span>
+        <span class="n">util</span><span class="o">.</span><span class="n">clean</span><span class="p">(</span><span class="n">force_count</span><span class="p">,</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">force_count</span><span class="p">),</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">force_count</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_temp"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_temp">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_temp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates gridded temperature, corrected for the local streaming</span>
+<span class="sd">        velocity.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        temp : :class:`numpy.ndarray`</span>
+<span class="sd">            Temperature corrected by local streaming velocity.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;temp&#39;]` and</span>
+<span class="sd">            :attr:`Grid.temp` in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">,</span> <span class="s">&#39;velocity&#39;</span><span class="p">)</span>
+
+        <span class="n">u</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">]</span>
+        <span class="n">units_factor</span> <span class="o">=</span> <span class="n">units</span><span class="o">.</span><span class="n">MASS</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">VELOCITY</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="n">units</span><span class="o">.</span><span class="n">ENERGY</span><span class="p">[</span><span class="n">u</span><span class="p">]</span>
+
+        <span class="c"># Getting effective streaming velocity for each atom.</span>
+        <span class="n">vel_grid_to_atom</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_reverse_mapping</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">velocity</span><span class="p">)</span>
+
+        <span class="n">mass_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;mass&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;mass&#39;</span><span class="p">]</span>
+        <span class="n">vel_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;velocity&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;velocity&#39;</span><span class="p">]</span>
+        <span class="n">vel_comps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">vectors</span><span class="p">[</span><span class="n">vel_name</span><span class="p">][</span><span class="s">&#39;comps&#39;</span><span class="p">]</span>
+
+        <span class="n">vel_corr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">(</span><span class="n">vel_comps</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span>\
+                   <span class="o">-</span> <span class="n">vel_grid_to_atom</span>
+
+        <span class="n">temp</span> <span class="o">=</span> <span class="n">units_factor</span> <span class="o">*</span> <span class="mf">2.0</span> <span class="o">*</span> \
+            <span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span>
+                        <span class="mf">0.5</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">mass_name</span><span class="p">,</span> 
+                                                 <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span>\
+                                       <span class="o">*</span><span class="p">(</span><span class="n">vel_corr</span><span class="o">*</span><span class="n">vel_corr</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">)</span>
+                                      <span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="mi">3</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">count</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_KBOLTZ</span><span class="p">)</span>
+
+        <span class="n">util</span><span class="o">.</span><span class="n">clean</span><span class="p">(</span><span class="n">temp</span><span class="p">,</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">temp</span><span class="p">),</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">temp</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_temp_uncorr"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_temp_uncorr">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_temp_uncorr</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates *uncorrected* gridded temperature.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        temp_uncorr : :class:`numpy.ndarray`</span>
+<span class="sd">            Gridded uncorrected temperature.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;temp_uncorr&#39;]` and</span>
+<span class="sd">            :attr:`Grid.temp_uncorr` in :meth:`Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_requirements</span><span class="p">(</span><span class="s">&#39;count&#39;</span><span class="p">)</span>
+
+        <span class="n">u</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">]</span>
+        <span class="n">units_factor</span> <span class="o">=</span> <span class="n">units</span><span class="o">.</span><span class="n">MASS</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">VELOCITY</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="n">units</span><span class="o">.</span><span class="n">ENERGY</span><span class="p">[</span><span class="n">u</span><span class="p">]</span>
+
+        <span class="n">vel_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;velocity&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;velocity&#39;</span><span class="p">]</span>
+        <span class="n">vel_comps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">vectors</span><span class="p">[</span><span class="n">vel_name</span><span class="p">][</span><span class="s">&#39;comps&#39;</span><span class="p">]</span>
+
+        <span class="n">mass_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;mass&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;mass&#39;</span><span class="p">]</span>
+        
+        <span class="n">vel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">(</span><span class="n">vel_comps</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span>
+
+        <span class="n">temp_uncorr</span> <span class="o">=</span> <span class="n">units_factor</span> <span class="o">*</span> <span class="mf">2.0</span> <span class="o">*</span> \
+                      <span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span> <span class="mf">0.5</span> <span class="o">*</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">mass_name</span><span class="p">,</span>
+                                                 <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span><span class="o">*</span>\
+                           <span class="p">(</span><span class="n">vel</span><span class="o">*</span><span class="n">vel</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">1</span><span class="p">))</span> <span class="o">/</span> <span class="p">(</span><span class="mi">3</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">count</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_KBOLTZ</span><span class="p">)</span>
+
+        <span class="n">util</span><span class="o">.</span><span class="n">clean</span><span class="p">(</span><span class="n">temp_uncorr</span><span class="p">,</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">temp_uncorr</span><span class="p">),</span> <span class="mf">0.</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">temp_uncorr</span>
+</div>
+<div class="viewcode-block" id="Grid._calc_stress"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._calc_stress">[docs]</a>    <span class="k">def</span> <span class="nf">_calc_stress</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calculates the gridded stress tensor.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">           The gridded stress tensor is based on spatial averaging of existing</span>
+<span class="sd">           atomic stress tensor.  Therefore, any streaming velocity correction</span>
+<span class="sd">           must be applied in the original calculation of the atomic</span>
+<span class="sd">           stress tensor.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        stress : :class:`numpy.ndarray`</span>
+<span class="sd">            Gridded stress tensor.</span>
+<span class="sd">            Also stored in :attr:`Grid.results[&#39;stress&#39;]` and</span>
+<span class="sd">            :attr:`Grid.stress` in `Grid.run()`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">stress_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;stress&#39;</span><span class="p">][</span><span class="s">&#39;atomwise&#39;</span><span class="p">][</span><span class="s">&#39;stress&#39;</span><span class="p">]</span>
+        <span class="n">stress_comps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">symm_tensors</span><span class="p">[</span><span class="n">stress_name</span><span class="p">][</span><span class="s">&#39;comps&#39;</span><span class="p">]</span>
+
+        <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_symm_tensor</span><span class="p">(</span><span class="n">stress_comps</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span>
+        <span class="n">s</span> <span class="o">=</span> <span class="n">util</span><span class="o">.</span><span class="n">clean</span><span class="p">(</span><span class="n">s</span><span class="p">,</span> <span class="o">~</span><span class="n">np</span><span class="o">.</span><span class="n">isfinite</span><span class="p">(</span><span class="n">s</span><span class="p">),</span> <span class="mf">0.</span><span class="p">)</span>
+
+        <span class="c"># atomwise stress from LAMMPS is multiplied by the volume</span>
+        <span class="n">stress</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span><span class="n">s</span><span class="p">)</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">elem_volume</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">stress</span>
+
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+<span class="c">#       Grid Sub-classes</span>
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+</div></div>
+<div class="viewcode-block" id="RectGrid"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.RectGrid">[docs]</a><span class="k">class</span> <span class="nc">RectGrid</span><span class="p">(</span><span class="n">Grid</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Regular grid over retangular region.</span>
+
+<span class="sd">    Aligned to global coordinate system of the central simulation cell.</span>
+
+<span class="sd">    Sub-class of :class:`Grid`.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Snap object.</span>
+<span class="sd">    axes : iterable</span>
+<span class="sd">        Total length of grid in each coordinate direction</span>
+<span class="sd">        (e.g. [5., 5., 5.])</span>
+<span class="sd">    grid_spacing : :class:`numpy.ndarray`</span>
+<span class="sd">        Size of grid element in each coordinate direction.</span>
+<span class="sd">    origin : :class:`numpy.ndarray`</span>
+<span class="sd">        Coordinate of low corner of grid.</span>
+<span class="sd">    offset : boolean</span>
+<span class="sd">        If ``True``, the grid is offset so the first grid node</span>
+<span class="sd">        is located at 0.5*:attr:`RectGrid.grid_spacing` from the</span>
+<span class="sd">        :attr:`RectGrid.origin` rather than at the :attr:`RectGrid.origin`.</span>
+<span class="sd">    mapping : string</span>
+<span class="sd">        Name of atom-to-grid mapping function to match</span>
+<span class="sd">        (e.g. ``&#39;ngp&#39;`` --? ``_mapping_ngp()`` ).</span>
+<span class="sd">    calcs : iterable</span>
+<span class="sd">        List of grid calculations to perform.  Names should match</span>
+<span class="sd">        associated function ``_calc_NAME()``.</span>
+<span class="sd">    wrap : boolean, [default=True]</span>
+<span class="sd">        If ``True``, coordinates in active data set in snap are</span>
+<span class="sd">        wrapped to the central simulation cell subject to PBC.</span>
+<span class="sd">    selection : boolean, [default=True]</span>
+<span class="sd">        If ``True``, selections are applied to snap object when getting</span>
+<span class="sd">        atom coordinates.</span>
+<span class="sd">    location : string, [default=&#39;Node&#39;]</span>
+<span class="sd">        Grid location of calculated values.</span>
+<span class="sd">        {&#39;Node&#39; } ``&#39;Cell&#39;`` location not currently implemented.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    origin : :class:`numpy.ndarray`</span>
+<span class="sd">        Coordinate of low corner of grid.</span>
+<span class="sd">    grid_spacing : :class:`numpy.ndarray`</span>
+<span class="sd">        Size of grid element in each coordinate direction.</span>
+<span class="sd">    elem_volume : float</span>
+<span class="sd">        Volume of grid element.</span>
+<span class="sd">    num_elem : :clas:`numpy.ndarray`</span>
+<span class="sd">        Number of grid elements in each coordinate direction.</span>
+<span class="sd">    grid_type : string</span>
+<span class="sd">        Name of type of grid (e.g. &#39;3DRegular&#39;)</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap` object.</span>
+<span class="sd">    use_selection :</span>
+<span class="sd">        If ``True``, any selections in :attr:`Grid.snap` are used.</span>
+<span class="sd">    atom_xyz :</span>
+<span class="sd">        Atomic positions for atoms in :attr:`Grid.snap`.</span>
+<span class="sd">    calcs :</span>
+<span class="sd">        List of calculations to perform, which is processed by</span>
+<span class="sd">        :meth:`Grid.setup_calculations` to generate :attr:`Grid.to_calc`.</span>
+<span class="sd">    to_calc :</span>
+<span class="sd">        List of calculations to do via :meth:`Grid.run_calc()`.</span>
+<span class="sd">    scalars :</span>
+<span class="sd">        List of scalars produced by grid calcs.</span>
+<span class="sd">    vectors :</span>
+<span class="sd">        List of vectors produced by grid calcs.</span>
+<span class="sd">    tensors :</span>
+<span class="sd">        List of tensors produced by grid calcs.</span>
+<span class="sd">    symm_tensors :</span>
+<span class="sd">        List of symmetric tensors produced by grid calcs.</span>
+<span class="sd">    dtypes :</span>
+<span class="sd">        dtype of data produced by grid calcs (i.e. &#39;int&#39; or &#39;float&#39;)</span>
+<span class="sd">    locations :</span>
+<span class="sd">        Location of data produced by grid calcs (i.e. &#39;Node&#39; or &#39;Cell&#39;).</span>
+<span class="sd">    types :</span>
+<span class="sd">        Type of output produced by grid calcs (i.e. &#39;scalars&#39;, &#39;vectors&#39;, ...)</span>
+<span class="sd">    bins :</span>
+<span class="sd">        Dictionary storing result of atoms-to-grid mapping.  Similar to</span>
+<span class="sd">        :attr:`mdhandle.properties.cell_decomposition.SparseBinning.bins`.</span>
+<span class="sd">        Must be supplied by the atom-to-grid mapping function.</span>
+<span class="sd">    grid_to_atom : :class:`numpy.ndarray`</span>
+<span class="sd">        Stores grid cells for each atom in the :attr:`Grid.snap`.</span>
+<span class="sd">        Must be supplied by the atom-to-grid mapping function.</span>
+<span class="sd">    _KBOLTZ :</span>
+<span class="sd">        Boltzmann constant in units consistent with :attr:`Grid.snap`.</span>
+<span class="sd">    _all_calcs :</span>
+<span class="sd">        List of all implemented grid calculations.</span>
+<span class="sd">    _matrix : :class:`numpy.ndarray` (3x3)</span>
+<span class="sd">        The lenghts of the grid along each coordinate direction</span>
+<span class="sd">        are the diagonal of :attr:`RectGrid._matrix`.</span>
+<span class="sd">    _boxL : :class:`numpy.ndarray`, (3x1)</span>
+<span class="sd">        Length of full grid in each coordinate direction.</span>
+
+<span class="sd">    Notes</span>
+<span class="sd">    ------</span>
+
+<span class="sd">    * Each grid calculation (``_calc_NAME()``) stores its result in </span>
+<span class="sd">      :class:`Grid` attribute with name matching name in :attr:`Grid.to_calc`.</span>
+<span class="sd">    * See :meth:`RectGrid._mapping_ngp` or :meth:`RectGrid._mapping_cic`</span>
+<span class="sd">      for basic requirements of a mapping function.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="n">grid_type</span> <span class="o">=</span> <span class="s">&#39;3DRegular&#39;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">axes</span><span class="p">,</span> <span class="n">grid_spacing</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">),</span>
+                             <span class="n">origin</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">),</span>
+                             <span class="n">offset</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span>
+                             <span class="n">mapping</span><span class="o">=</span><span class="s">&#39;ngp&#39;</span><span class="p">,</span>
+                             <span class="n">calcs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>
+                             <span class="n">wrap</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                             <span class="n">selection</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
+                             <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">):</span>
+
+        <span class="nb">super</span><span class="p">(</span><span class="n">RectGrid</span><span class="p">,</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="p">,</span> <span class="n">wrap</span><span class="p">,</span> <span class="n">selection</span><span class="p">,</span> <span class="n">location</span><span class="p">)</span>
+
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">origin</span> <span class="o">=</span> <span class="n">origin</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span> <span class="o">=</span> <span class="n">grid_spacing</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">elem_volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">axes</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+
+        <span class="c"># Testing that box defining RectGrid is orthogongal</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> \
+                    <span class="s">&#39;RectGrid must be orthogonal.  Redefine _matrix.&#39;</span>
+        <span class="k">assert</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="mi">2</span><span class="p">])</span> <span class="o">==</span> <span class="mi">0</span><span class="p">,</span> \
+                    <span class="s">&#39;RectGrid must be orthogonal.  Redefine _matrix.&#39;</span>
+
+        <span class="k">if</span> <span class="n">offset</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">origin</span> <span class="o">=</span> <span class="n">origin</span> <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span> <span class="o">/</span> <span class="mf">2.0</span>
+
+            <span class="n">new_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
+            <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">1</span><span class="p">]):</span>
+                <span class="n">col</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="n">i</span><span class="p">]</span>
+                <span class="n">new_len</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">col</span><span class="p">)</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span>
+                <span class="n">new_matrix</span><span class="p">[:,</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">vectors</span><span class="o">.</span><span class="n">unit_vec</span><span class="p">(</span><span class="n">col</span><span class="p">)</span><span class="o">*</span><span class="n">new_len</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span> <span class="o">=</span> <span class="n">new_matrix</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">norm</span><span class="p">(</span><span class="n">i</span><span class="p">)</span> <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="o">.</span><span class="n">T</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">remainder</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remainder</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_elem</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="mf">1.0</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span> <span class="o">+</span>
+                                                    <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">set_mapping_function</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span>
+
+<div class="viewcode-block" id="RectGrid.mapping_func"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.RectGrid.mapping_func">[docs]</a>    <span class="k">def</span> <span class="nf">mapping_func</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Dummy function to override abstract function in :class:`Grid`</span>
+<span class="sd">        base class so that class can be instantiated.</span>
+<span class="sd">        </span>
+<span class="sd">        The actual mapping function is assigned by </span>
+<span class="sd">        :meth:`RectGrid.set_mapping_function`.</span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">pass</span>
+</div>
+<div class="viewcode-block" id="RectGrid._mapping_ngp"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.RectGrid._mapping_ngp">[docs]</a>    <span class="k">def</span> <span class="nf">_mapping_ngp</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Peforms nearest-grid-point (NGP) zeroth order atom-to-grid mapping.</span>
+
+<span class="sd">        The resulting mapping is stored in :attr:`RectGrid.bins`.</span>
+
+<span class="sd">        The reverse grid-to-atom mapping is stored in</span>
+<span class="sd">        :attr:`RectGrid.grid_to_atom`.</span>
+
+<span class="sd">        References</span>
+<span class="sd">        ----------</span>
+<span class="sd">        * Hockney &amp; Eastwood, Computer Simulation Using Particles, CRC Press,</span>
+<span class="sd">          1988.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="p">(</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">atom_xyz</span> <span class="o">-</span> <span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">)</span> <span class="o">/</span>
+                                      <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span><span class="o">.</span><span class="n">round</span><span class="p">()</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">idx</span><span class="p">),</span> <span class="mi">2</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">object</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="p">(</span><span class="n">atom_id</span><span class="p">,</span> <span class="n">idx_move</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">idx</span><span class="p">):</span>
+            <span class="n">idx_move</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">idx_move</span><span class="p">)</span>
+
+            <span class="c"># Avoiding atoms outside of the grid</span>
+            <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">idx_move</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_elem</span><span class="p">)</span> <span class="ow">or</span>\
+               <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span><span class="n">idx_move</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
+                <span class="k">continue</span>
+
+            <span class="n">bin0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bins</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">idx_move</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">bin0</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="n">bin0</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;atoms&#39;</span><span class="p">:</span><span class="nb">set</span><span class="p">(),</span> <span class="s">&#39;weights&#39;</span><span class="p">:[]}</span>
+                <span class="c"># 1. hardcoded as this is the weighting</span>
+                <span class="n">bin0</span><span class="p">[</span><span class="s">&#39;atoms&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">atom_id</span><span class="p">)</span>
+                <span class="n">bin0</span><span class="p">[</span><span class="s">&#39;weights&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">bins</span><span class="p">[</span><span class="n">idx_move</span><span class="p">]</span> <span class="o">=</span> <span class="n">bin0</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="c"># 1.0 hardcoded as this is the weighting</span>
+                <span class="n">bin0</span><span class="p">[</span><span class="s">&#39;atoms&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">atom_id</span><span class="p">)</span>
+                <span class="n">bin0</span><span class="p">[</span><span class="s">&#39;weights&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
+
+            <span class="c"># Storing reverse mapping.</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[</span><span class="n">atom_id</span><span class="p">][</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">idx_move</span><span class="p">]</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[</span><span class="n">atom_id</span><span class="p">][</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="mf">1.0</span><span class="p">]</span>
+</div>
+<div class="viewcode-block" id="RectGrid._mapping_cic"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.RectGrid._mapping_cic">[docs]</a>    <span class="k">def</span> <span class="nf">_mapping_cic</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Peforms cell-in-cloud (CIC) first order atom-to-grid mapping.</span>
+
+<span class="sd">        The resulting mapping is stored in :attr:`RectGrid.bins`.</span>
+
+<span class="sd">        The reverse grid-to-atom mapping is stored in</span>
+<span class="sd">        :attr:`RectGrid.grid_to_atom`.</span>
+
+<span class="sd">        References</span>
+<span class="sd">        -----------</span>
+<span class="sd">        * Hockney &amp; Eastwood, Computer Simulation Using Particles, CRC Press,</span>
+<span class="sd">          1988.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">idx</span> <span class="o">=</span> <span class="p">(</span> <span class="bp">self</span><span class="o">.</span><span class="n">atom_xyz</span><span class="o">-</span><span class="bp">self</span><span class="o">.</span><span class="n">origin</span> <span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span>
+        <span class="n">idx_down</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="n">idx</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">empty</span><span class="p">((</span><span class="nb">len</span><span class="p">(</span><span class="n">idx</span><span class="p">),</span> <span class="mi">2</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">object</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">movement</span> <span class="ow">in</span> <span class="p">(</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">),</span>
+                          <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">),</span> <span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="p">):</span>
+
+            <span class="c"># Fractional distance to grid point defined by movement</span>
+            <span class="c"># which iterates through the NGP.</span>
+            <span class="n">diff_frac</span> <span class="o">=</span> <span class="mi">1</span> <span class="o">-</span> <span class="n">np</span><span class="o">.</span><span class="n">abs</span><span class="p">(</span><span class="n">idx</span> <span class="o">-</span> <span class="p">(</span><span class="n">idx_down</span> <span class="o">+</span> <span class="n">movement</span><span class="p">))</span>
+
+            <span class="k">for</span> <span class="p">(</span><span class="n">atom_id</span><span class="p">,</span> <span class="n">idx_move</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="n">idx_down</span> <span class="o">+</span> <span class="n">movement</span><span class="p">):</span>
+                <span class="n">idx_move</span> <span class="o">=</span> <span class="nb">tuple</span><span class="p">(</span><span class="n">idx_move</span><span class="p">)</span>
+
+                <span class="k">if</span> <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span> <span class="n">idx_move</span> <span class="o">&gt;=</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_elem</span><span class="p">)</span> <span class="ow">or</span>\
+                   <span class="n">np</span><span class="o">.</span><span class="n">any</span><span class="p">(</span> <span class="n">idx_move</span> <span class="o">&lt;</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">)):</span>
+                    <span class="k">continue</span>
+
+                <span class="n">bin0</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">bins</span><span class="o">.</span><span class="n">get</span><span class="p">(</span><span class="n">idx_move</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">bin0</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="n">bin0</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;atoms&#39;</span><span class="p">:</span><span class="nb">set</span><span class="p">(),</span> <span class="s">&#39;weights&#39;</span><span class="p">:[]}</span>
+                    <span class="c"># 1. hardcoded as this is the weighting</span>
+                    <span class="n">bin0</span><span class="p">[</span><span class="s">&#39;atoms&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">atom_id</span><span class="p">)</span>
+                    <span class="n">bin0</span><span class="p">[</span><span class="s">&#39;weights&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span> <span class="n">diff_frac</span><span class="p">[</span><span class="n">atom_id</span><span class="p">])</span> <span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">bins</span><span class="p">[</span><span class="n">idx_move</span><span class="p">]</span> <span class="o">=</span> <span class="n">bin0</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">bin0</span><span class="p">[</span><span class="s">&#39;atoms&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">add</span><span class="p">(</span><span class="n">atom_id</span><span class="p">)</span>
+                    <span class="n">bin0</span><span class="p">[</span><span class="s">&#39;weights&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span> <span class="n">diff_frac</span><span class="p">[</span><span class="n">atom_id</span><span class="p">])</span> <span class="p">)</span>
+
+                <span class="c"># Reverse mapping.</span>
+                <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[</span><span class="n">atom_id</span><span class="p">,</span> <span class="mi">0</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="c"># First time through create lists at each element.</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[</span><span class="n">atom_id</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">idx_move</span><span class="p">]</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[</span><span class="n">atom_id</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">diff_frac</span><span class="p">[</span><span class="n">atom_id</span><span class="p">])]</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="c"># Otherwise append to existing lists.</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[</span><span class="n">atom_id</span><span class="p">,</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">idx_move</span><span class="p">)</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[</span><span class="n">atom_id</span><span class="p">,</span><span class="mi">1</span><span class="p">]</span><span class="o">.</span><span class="n">append</span><span class="p">(</span>
+                                                   <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="n">diff_frac</span><span class="p">[</span><span class="n">atom_id</span><span class="p">]))</span>
+
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+<span class="c">#                   Setting module level constants</span>
+<span class="c"># -----------------------------------------------------------------------------</span>
+</div></div>
+<span class="n">IMPLEMENTED_GRIDS</span> <span class="o">=</span> <span class="n">get_implemented_grids</span><span class="p">()</span>
+
+<span class="c"># =============================================================================</span>
+
+
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../properties.html" >mdhandle.properties</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

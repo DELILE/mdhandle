@@ -1,0 +1,310 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.sim_cell &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.sim_cell</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Handling information about unit cell and periodic boundary conditions.</span>
+
+<span class="sd">**Credits**: </span>
+
+<span class="sd">* `MD-Tracks` simulation cell implementation.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c"># TODO: Incorporate other simulation cell metadata currently stored w/i Snap</span>
+<span class="c">#       such as xlo, ylo, etc.</span>
+<span class="c"># TODO: Extend beyond orthogonal simulation cell aligned to global XYZ coord.</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="SimCell"><a class="viewcode-back" href="../../reference.html#mdhandle.sim_cell.SimCell">[docs]</a><span class="k">class</span> <span class="nc">SimCell</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Stores information regarding the simulation cell.</span>
+
+<span class="sd">    **Assumptions**:</span>
+
+<span class="sd">    * Simulation cell is orthogonal.</span>
+<span class="sd">    * Simulation cell is 3D.</span>
+<span class="sd">    * Simulation cell attributes are implictly read-only once created by</span>
+<span class="sd">      ``__init__()``.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    axes : iterable of float</span>
+<span class="sd">        Elements of iterable define the size of the simulation cell</span>
+<span class="sd">        in each coordinate direction.</span>
+<span class="sd">        The simulation cell is assumed to be aligned to the fixed global XYZ</span>
+<span class="sd">        coordinate directions.</span>
+<span class="sd">    origin : :class:`numpy.ndarray`, (3x1)</span>
+<span class="sd">        Origin of simulation domain relative to fixed global XYZ coordinates.</span>
+<span class="sd">    pbc : boolean :class:`numpy.ndarray` (3x1)</span>
+<span class="sd">        Defines the periodic boundary conditions along each </span>
+<span class="sd">        coordinate direction. If ``True``, PBC invoked at BOTH the</span>
+<span class="sd">        positive and negative faces of simulation cell.</span>
+<span class="sd">        [default=np.array[[True, True, True]]</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    pbc : :class:`numpy.ndarray`, (3x1)</span>
+<span class="sd">        Defines periodic boundary conditions along each coordinate direction.</span>
+<span class="sd">    origin : :class:`numpy.ndarray`, (3x1)</span>
+<span class="sd">        Low corner of simulation cell relative to fixed XYZ frame.</span>
+<span class="sd">    volume : float</span>
+<span class="sd">        Volume of simulation cell.</span>
+<span class="sd">    angles : :class:`numpy.ndarray`, (3x1)</span>
+<span class="sd">        Corner angles of simulation cell.</span>
+<span class="sd">    _matrix : :class:`numpy.ndarray`, (3x3)</span>
+<span class="sd">        Diagonals are lenghts of the simulation cell.</span>
+<span class="sd">    _boxL : :class:`numpy.ndarray`, (3x1)</span>
+<span class="sd">        Length of full grid in each coordinate direction.</span>
+<span class="sd">    _recip : :class:`numpy.ndarray`, (3x3)</span>
+<span class="sd">        Inverse of :attr:`_matrix`.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">axes</span><span class="p">,</span>
+                       <span class="n">origin</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="mi">3</span><span class="p">),</span>
+                       <span class="n">pbc</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">bool</span><span class="p">)):</span>
+
+        <span class="c"># ASSERT: pbc is a vector with length 3.</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">pbc</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pbc</span><span class="p">,</span> <span class="nb">list</span><span class="p">):</span>
+            <span class="n">pbc</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">pbc</span><span class="p">)</span>
+
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">pbc</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="k">assert</span> <span class="n">pbc</span><span class="o">.</span><span class="n">dtype</span> <span class="o">==</span> <span class="n">np</span><span class="o">.</span><span class="n">dtype</span><span class="p">(</span><span class="s">&#39;bool&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pbc</span> <span class="o">=</span> <span class="n">pbc</span>
+
+        <span class="c"># ASSERT: axes is a vector with length 3.</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">axes</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">axes</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+
+        <span class="c"># ASSERT: origin is a vector with length 3.</span>
+        <span class="k">assert</span> <span class="nb">len</span><span class="p">(</span><span class="n">origin</span><span class="p">)</span> <span class="o">==</span> <span class="mi">3</span>
+        <span class="k">assert</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">origin</span><span class="p">,</span> <span class="n">np</span><span class="o">.</span><span class="n">ndarray</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">origin</span> <span class="o">=</span> <span class="n">origin</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">)</span>
+
+        <span class="c"># ASSERT: All lengths must be postive</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="p">:</span>
+            <span class="k">assert</span> <span class="n">i</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">volume</span> <span class="o">=</span> <span class="nb">abs</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">det</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">))</span>
+        <span class="c"># ASSERT: Sim cell must have positive volume</span>
+        <span class="k">assert</span> <span class="bp">self</span><span class="o">.</span><span class="n">volume</span> <span class="o">&gt;</span> <span class="mi">0</span>
+
+        <span class="c"># Reciprocal of simulation cell values.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_recip</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linalg</span><span class="o">.</span><span class="n">inv</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">)</span>
+
+        <span class="c"># Angles defining simulation cell</span>
+        <span class="n">alpha</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="mi">2</span><span class="p">])</span> <span class="o">/</span>\
+                                            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="p">[</span><span class="mi">2</span><span class="p">]))</span>
+        <span class="n">beta</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="mi">2</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="mi">0</span><span class="p">])</span> <span class="o">/</span>\
+                                            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="n">gamma</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arccos</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span> <span class="o">/</span>\
+                                            <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="p">[</span><span class="mi">1</span><span class="p">]))</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">angles</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">([</span><span class="n">alpha</span><span class="p">,</span> <span class="n">beta</span><span class="p">,</span> <span class="n">gamma</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+
+<div class="viewcode-block" id="SimCell.to_fractional"><a class="viewcode-back" href="../../reference.html#mdhandle.sim_cell.SimCell.to_fractional">[docs]</a>    <span class="k">def</span> <span class="nf">to_fractional</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">full_xyz</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns vector collection of positions coordinates converted</span>
+<span class="sd">        to fractional values of basic simulation cell dimensions.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        full_xyz : :class:`numpy.ndarray` (Nx3)</span>
+<span class="sd">            Vector collection of raw coordinates.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        frac : :class:`numpy.ndarray` (Nx3)</span>
+<span class="sd">            Returns vector stack of same size as ``full_xyz``</span>
+<span class="sd">            normalized by the size of the simulation cell</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">frac</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">full_xyz</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_recip</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">frac</span>
+</div>
+<div class="viewcode-block" id="SimCell.from_fractional"><a class="viewcode-back" href="../../reference.html#mdhandle.sim_cell.SimCell.from_fractional">[docs]</a>    <span class="k">def</span> <span class="nf">from_fractional</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fractional</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns a vector collection with raw position coordinates</span>
+<span class="sd">        from fractional positions normalized by simulation cell size.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        fractional : :class:`numpy.ndarray` (shape=Nx3)</span>
+<span class="sd">            Vector collection of fractional coordinates.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        pos : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">            Returns vector stack of same size as fractional</span>
+<span class="sd">            with positions back into unmodified absolute coordinates within</span>
+<span class="sd">            the simulation cell</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        ---------</span>
+<span class="sd">        :meth:`to_fractional`</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">pos</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">dot</span><span class="p">(</span><span class="n">fractional</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span><span class="o">.</span><span class="n">transpose</span><span class="p">())</span>
+        <span class="k">return</span> <span class="n">pos</span>
+</div>
+<div class="viewcode-block" id="SimCell.mic_distance"><a class="viewcode-back" href="../../reference.html#mdhandle.sim_cell.SimCell.mic_distance">[docs]</a>    <span class="k">def</span> <span class="nf">mic_distance</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">raw_distance</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Enforce periodic boundary conditions and the minimum</span>
+<span class="sd">        image convention on interatomic distance (``raw_distance``).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        raw_distance : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">            Vector collection of raw interatomic distance measures.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        min_img : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">            Returns vector collection of the same shape as ``raw_distance`` </span>
+<span class="sd">            with fractional coordinates ranging between [-0.5,0.5] to satisfy</span>
+<span class="sd">            the minimum image convention.</span>
+
+<span class="sd">         &quot;&quot;&quot;</span>
+        <span class="n">frac</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_fractional</span><span class="p">(</span><span class="n">raw_distance</span><span class="p">)</span>
+        <span class="n">frac</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">pbc</span><span class="o">*</span><span class="n">frac</span><span class="o">.</span><span class="n">round</span><span class="p">()</span>
+        <span class="n">min_img</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">from_fractional</span><span class="p">(</span><span class="n">frac</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">min_img</span>
+</div>
+<div class="viewcode-block" id="SimCell.wrap_to_central"><a class="viewcode-back" href="../../reference.html#mdhandle.sim_cell.SimCell.wrap_to_central">[docs]</a>    <span class="k">def</span> <span class="nf">wrap_to_central</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">pos</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Wraps a vector collection of atom positions into the central periodic</span>
+<span class="sd">        image or primary simulation cell.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        pos : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">            Vector collection of atom positions.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        wrap : :class:`numpy.ndarray`, (Nx3)</span>
+<span class="sd">            Returns atomic positions wrapped into the primary simulation</span>
+<span class="sd">            cell, or periodic image.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">wrap</span> <span class="o">=</span> <span class="n">pos</span> <span class="o">+</span> <span class="p">(</span><span class="n">pos</span> <span class="o">&lt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">origin</span><span class="p">)</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">pbc</span> \
+                      <span class="o">-</span> <span class="p">(</span><span class="n">pos</span> <span class="o">&gt;</span> <span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="p">)</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">pbc</span>
+        <span class="k">return</span> <span class="n">wrap</span>
+
+
+<span class="c">#=============================================================================</span>
+</div></div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

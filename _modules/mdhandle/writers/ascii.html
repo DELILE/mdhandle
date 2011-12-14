@@ -1,0 +1,277 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.writers.ascii &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="up" title="Module code" href="../../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.writers.ascii</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Takes a :class:`mdhandle.snap.Snap` and outputs atom data to a LAMMPS</span>
+<span class="sd">formatted dump file.  Columns in the LAMMPS dump file are not ordered according</span>
+<span class="sd">to original LAMMPS output file beyond atom ``id``, which remains the first</span>
+<span class="sd">column.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c"># TODO: Ability to handle simulations that are not just atoms</span>
+<span class="c">#       (e.g. polyatomic molecules)</span>
+<span class="c"># TODO: Ability to output only a subset of columns, while ensuring that</span>
+<span class="c">#       important columns are included (e.g. id, type, x, y, z)</span>
+
+<span class="c"># TODO: Add ability to handle case where only getting subset of atoms.</span>
+<span class="c">#       - Currently hard coded self.snap.meta[&#39;num_atoms&#39;]</span>
+<span class="c">#       - Extraction of atomwise data already able to handle use of selection.</span>
+
+<span class="c"># ------------------------------------------------------------------------------</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">os</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+
+<span class="c"># ------------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="AsciiWriter"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.ascii.AsciiWriter">[docs]</a><span class="k">class</span> <span class="nc">AsciiWriter</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Class for writing ASCII dump files for a simulation snapshot in the</span>
+<span class="sd">    format of LAMMPS ASCII output.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">        Current simulation snapshot.</span>
+<span class="sd">        Active dataset should be of type ``&#39;atoms&#39;``.</span>
+<span class="sd">    verbose : boolean,  [default=False]</span>
+<span class="sd">        Flag indicating verbosity of user input and output.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    snap : :class:`mdhandle.snap.Snap`</span>
+<span class="sd">    verbose : boolean</span>
+<span class="sd">        If ``True`` user I/O is verbose</span>
+<span class="sd">    logger : :class:`mdhandle.logger.Logger` </span>
+<span class="sd">        Object for user I/O and logging.</span>
+<span class="sd">    ascii_fn : string</span>
+<span class="sd">        Name of output ASCII LAMMPS dump file.</span>
+<span class="sd">    output_dir : string</span>
+<span class="sd">        Absolute path to output directory for LAMMPS dump file.</span>
+<span class="sd">    column_names : list of string</span>
+<span class="sd">        Names of atomwise scalars (i.e. ``&#39;x&#39;``, ``&#39;fx&#39;``, ``&#39;epair&#39;``)</span>
+<span class="sd">    header : string</span>
+<span class="sd">        LAMMPS header - See LAMMPS user guide for more information.</span>
+<span class="sd">    _f : file</span>
+<span class="sd">        File handle to open ``ascii_fn``.</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    -------</span>
+<span class="sd">    new: Creates ASCII file and writes LAMMPS dump header.</span>
+<span class="sd">    write: Writes body of LAMMPS dump (i.e. atomwise data) to existing file.</span>
+<span class="sd">    finish: Flushes buffers and closes ASCII file.</span>
+
+<span class="sd">    References</span>
+<span class="sd">    -----------</span>
+<span class="sd">    * LAMMPS ``dump`` comand, http://lammps.sandia.gov/doc/dump.html</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span> <span class="o">=</span> <span class="n">snap</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+        
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">!=</span> <span class="s">&#39;atoms&#39;</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&quot;Active dataset is of type </span><span class="si">%s</span><span class="s"> not &#39;atoms&#39;.&quot;</span> <span class="o">%</span>
+                                                   <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">])</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">ascii_fn</span> <span class="o">=</span> <span class="s">&#39;ASCII_</span><span class="si">%s</span><span class="s">+.dat&#39;</span> <span class="o">%</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">splitext</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">fn_base</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_f</span> <span class="o">=</span> <span class="bp">None</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">output_dir</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">directory</span>
+
+        <span class="c"># Order is preserved by getting it in list form</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">column_names</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">col_mapping</span><span class="o">.</span><span class="n">keys</span><span class="p">()</span>
+
+        <span class="c"># Col for atom id is always the first column</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">column_names</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s">&#39;id&#39;</span><span class="p">)</span>
+        <span class="c"># Col for atom type is always the second column</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">column_names</span><span class="o">.</span><span class="n">remove</span><span class="p">(</span><span class="s">&#39;type&#39;</span><span class="p">)</span>
+
+        <span class="c"># TODO: meld with header constant in mdhandle.settings</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">header</span> <span class="o">=</span> <span class="s">&#39;&#39;&#39;ITEM: TIMESTEP</span>
+<span class="s">        </span><span class="si">%d</span><span class="s"></span>
+<span class="s">        ITEM: NUMBER OF ATOMS</span>
+<span class="s">        </span><span class="si">%d</span><span class="s"></span>
+<span class="s">        ITEM: BOX BOUNDS</span>
+<span class="s">        </span><span class="si">%f</span><span class="s"> </span><span class="si">%f</span><span class="s"></span>
+<span class="s">        </span><span class="si">%f</span><span class="s"> </span><span class="si">%f</span><span class="s"></span>
+<span class="s">        </span><span class="si">%f</span><span class="s"> </span><span class="si">%f</span><span class="s"></span>
+<span class="s">        ITEM: ATOMS id type </span><span class="si">%s</span><span class="s"></span>
+<span class="s">        &#39;&#39;&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;time&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">],</span>
+               <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;xlo&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;xhi&#39;</span><span class="p">],</span>
+               <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;ylo&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;yhi&#39;</span><span class="p">],</span>
+               <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;zlo&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;zhi&#39;</span><span class="p">],</span>
+               <span class="s">&#39; &#39;</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">column_names</span><span class="p">)</span> <span class="p">)</span>
+
+<div class="viewcode-block" id="AsciiWriter.new"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.ascii.AsciiWriter.new">[docs]</a>    <span class="k">def</span> <span class="nf">new</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Creates new ASCII file and writes necessary LAMMPS header.</span>
+
+<span class="sd">        Header is new-style (post-2009) with column names in the final</span>
+<span class="sd">        ``&#39;ITEM:ATOMS ... &#39;`` line.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># np.savetxt(..) will have optional header parameter for numpy&gt;=2.0</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">ascii_fn</span><span class="p">,</span> <span class="s">&#39;w&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_f</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">header</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="AsciiWriter.write"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.ascii.AsciiWriter.write">[docs]</a>    <span class="k">def</span> <span class="nf">write</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Write atomwise data to ASCII dump file..</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Checking that new file has been opened.</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_f</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Ouput file </span><span class="si">%s</span><span class="s"> does not exist. Use new().&#39;</span> <span class="o">%</span>
+                                                <span class="bp">self</span><span class="o">.</span><span class="n">ascii_fn</span><span class="p">)</span>
+            <span class="k">return</span>
+        <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">_f</span><span class="o">.</span><span class="n">closed</span> <span class="ow">is</span> <span class="bp">False</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Output file </span><span class="si">%s</span><span class="s"> is closed.&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">ascii_fn</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="c"># Empty array</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">],</span>
+                         <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">col_mapping</span><span class="p">)</span> <span class="p">))</span>
+
+        <span class="n">data</span><span class="p">[:,</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="s">&#39;id&#39;</span><span class="p">)</span>
+        <span class="n">data</span><span class="p">[:,</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="s">&#39;type&#39;</span><span class="p">)</span>
+
+        <span class="n">line_format</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+        <span class="k">for</span> <span class="n">i</span><span class="p">,</span><span class="n">col_name</span> <span class="ow">in</span> <span class="nb">enumerate</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">column_names</span><span class="p">):</span>
+            <span class="n">data</span><span class="p">[:,</span><span class="mi">2</span><span class="o">+</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">col_name</span><span class="p">)</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">col_mapping</span><span class="p">[</span><span class="n">col_name</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s">&#39;int&#39;</span><span class="p">:</span>
+                <span class="n">line_format</span> <span class="o">+=</span> <span class="s">&#39;</span><span class="si">%d</span><span class="s"> &#39;</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">col_mapping</span><span class="p">[</span><span class="n">col_name</span><span class="p">][</span><span class="s">&#39;dtype&#39;</span><span class="p">]</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span> <span class="o">==</span> <span class="s">&#39;float&#39;</span><span class="p">:</span>
+                <span class="n">line_format</span> <span class="o">+=</span> <span class="s">&#39;</span><span class="si">%f</span><span class="s"> &#39;</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">raise</span> <span class="ne">UserWarning</span><span class="p">(</span><span class="s">&#39;Column </span><span class="si">%s</span><span class="s"> dtype is not int or float.&#39;</span><span class="p">)</span>
+
+        <span class="n">np</span><span class="o">.</span><span class="n">savetxt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_f</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">fmt</span><span class="o">=</span><span class="n">line_format</span><span class="p">,</span> <span class="n">delimiter</span><span class="o">=</span><span class="s">&#39; &#39;</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="AsciiWriter.finish"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.ascii.AsciiWriter.finish">[docs]</a>    <span class="k">def</span> <span class="nf">finish</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Closes ASCII file and performs any other finalizing operations on new</span>
+<span class="sd">        ASCII file.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">completion_msg</span><span class="p">(</span><span class="s">&#39;ASCII file creaed </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="bp">self</span><span class="o">.</span><span class="n">ascii_fn</span><span class="p">)</span>
+
+
+<span class="c">#=============================================================================</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

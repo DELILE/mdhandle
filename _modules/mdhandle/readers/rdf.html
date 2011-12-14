@@ -1,0 +1,319 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.readers.rdf &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="up" title="mdhandle.readers" href="../readers.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../readers.html" accesskey="U">mdhandle.readers</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.readers.rdf</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Parses LAMMPS RDF files to provide analysis and graphing functionality.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c"># TODO: Add ability to handle multiple atom types.</span>
+<span class="c"># TODO: Add ability to select timesteps from within RDF data file.</span>
+<span class="c"># TODO: Add compute for standard deviation</span>
+<span class="c"># TODO: Get nbins from rdf data file rather than as input to RDF __init__(...)</span>
+<span class="c"># TODO: Use existing LAMMPS averages which exist after any run command ends</span>
+<span class="c"># TODO: Add subset argument to plot_rdf_movie to allow for use of only some of</span>
+<span class="c">#       total data.</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">from</span> <span class="nn">StringIO</span> <span class="kn">import</span> <span class="n">StringIO</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">matplotlib.pyplot</span> <span class="kn">as</span> <span class="nn">plt</span>
+<span class="kn">from</span> <span class="nn">scipy.interpolate</span> <span class="kn">import</span> <span class="n">interp1d</span>
+
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">()</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="RDF"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.rdf.RDF">[docs]</a><span class="k">class</span> <span class="nc">RDF</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Class for parsing and processing LAMMPS RDF data produced by</span>
+<span class="sd">    ``compute rdf`` command.</span>
+
+<span class="sd">    LAMMPS RDF data:</span>
+<span class="sd">    </span>
+<span class="sd">    * Always ASCII.</span>
+<span class="sd">    * File broken down into blocks based on timestep.</span>
+<span class="sd">    * At each timestep RDF data given as a function of interatomic</span>
+<span class="sd">      distance (``r``)</span>
+<span class="sd">    * At each timestep three columns : ``r rdf coord``</span>
+<span class="sd">    * ``coord`` is the sum of rdf up to that point.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fn : string</span>
+<span class="sd">        Name of rdf file.</span>
+<span class="sd">    nbins : int</span>
+<span class="sd">        Number of bins used in LAMMPS compute command to produce data.</span>
+<span class="sd">    comment_char : string,  [default=&#39;#&#39;]</span>
+<span class="sd">        Comment character - skip lines with leading comment character.</span>
+<span class="sd">    verbose : boolean,  [default=False]</span>
+<span class="sd">        If ``True``, verbose user I/O.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    fn : string</span>
+<span class="sd">        RDF filename.</span>
+<span class="sd">    verbose : boolean</span>
+<span class="sd">        If ``True``, verbose user I/O.</span>
+<span class="sd">    nbins : int</span>
+<span class="sd">        Number of bins used in calculation of RDF file.</span>
+<span class="sd">    comment : string</span>
+<span class="sd">        Comment character in RDF file.</span>
+<span class="sd">    times : list of int</span>
+<span class="sd">        List of timestep values at which RDF function was stored.</span>
+<span class="sd">    is_lammps_averaged : boolean</span>
+<span class="sd">        If ``True`` average RDF has been computed by LAMMPS.</span>
+<span class="sd">    computed_avg : :class:`numpy.ndarray`</span>
+<span class="sd">        Average RDF computed from RDF file read from disk.</span>
+<span class="sd">    data : :class:`numpy.ndarray`</span>
+<span class="sd">        3-dimensional array storing tables of (``r rdf coord``).</span>
+<span class="sd">    r : :class:`numpy.ndarray`.</span>
+<span class="sd">        Discrete sample of radius used as indep variable in RDF function.</span>
+<span class="sd">        Cutoff used in LAMMPS calculation can be inverred from ``r.max()``</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    --------</span>
+<span class="sd">    average()</span>
+<span class="sd">        Calculate average of RDF functions over time.</span>
+<span class="sd">    plot_rdf(step_num, clear=True, smoothing=False)</span>
+<span class="sd">        Plot single rdf file.</span>
+<span class="sd">    plot_rdf_movie(clear=True, save=True, fmt=&#39;.png&#39;)</span>
+<span class="sd">        Plot *movie* of RDF function over time.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">fn</span><span class="p">,</span> <span class="n">nbins</span><span class="p">,</span> <span class="n">comment_char</span><span class="o">=</span><span class="s">&#39;#&#39;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">fn</span> <span class="o">=</span> <span class="n">fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nbins</span> <span class="o">=</span> <span class="n">nbins</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+
+        <span class="n">f_rdf</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn</span><span class="p">,</span> <span class="s">&#39;r&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">times</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_lammps_averaged</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">computed_avg</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="n">num_steps</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f_rdf</span><span class="p">:</span>
+            <span class="k">if</span> <span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> Timestep&#39;</span> <span class="o">%</span> <span class="n">comment_char</span><span class="p">)</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
+                <span class="n">num_steps</span> <span class="o">+=</span> <span class="mi">1</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">times</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">line</span><span class="o">.</span><span class="n">split</span><span class="p">()[</span><span class="o">-</span><span class="mi">2</span><span class="p">])</span>
+            <span class="k">elif</span> <span class="p">(</span><span class="s">&#39;</span><span class="si">%s</span><span class="s"> Run Average&#39;</span> <span class="o">%</span> <span class="n">comment_char</span><span class="p">)</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">is_lammps_averaged</span> <span class="o">=</span> <span class="bp">True</span>
+
+        <span class="n">f_rdf</span><span class="o">.</span><span class="n">seek</span><span class="p">(</span><span class="mi">0</span><span class="p">)</span>
+
+        <span class="c"># Filter off Header files so just data is left.</span>
+        <span class="n">good_data</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+        <span class="n">f_iter</span> <span class="o">=</span> <span class="nb">iter</span><span class="p">(</span><span class="n">f_rdf</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">line</span> <span class="ow">in</span> <span class="n">f_iter</span><span class="p">:</span>
+            <span class="k">if</span> <span class="s">&#39;# Timestep&#39;</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
+                <span class="c"># Also skip the next line: r, g(1,1,r), ncoord(1,1,r)</span>
+                <span class="n">f_iter</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+            <span class="k">elif</span> <span class="s">&#39;# Run Average&#39;</span> <span class="ow">in</span> <span class="n">line</span><span class="p">:</span>
+                <span class="c"># Also skip the next line: r, g(1,1,r), ncoord(1,1,r)</span>
+                <span class="n">f_iter</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+                <span class="c"># Skipping the averaged RDF results under &quot;# Run Average&quot;</span>
+                <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">nbins</span><span class="p">):</span>
+                    <span class="n">f_iter</span><span class="o">.</span><span class="n">next</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">good_data</span> <span class="o">+=</span> <span class="n">line</span>
+
+        <span class="c"># Making numpy.ndarray from good lines of RDF data file</span>
+        <span class="n">raw_data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">loadtxt</span><span class="p">(</span><span class="n">StringIO</span><span class="p">(</span><span class="n">good_data</span><span class="p">),</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
+
+        <span class="c"># HARDCODED: number of columns.</span>
+        <span class="n">num_cols</span> <span class="o">=</span> <span class="mi">3</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">data</span> <span class="o">=</span> <span class="n">raw_data</span><span class="o">.</span><span class="n">reshape</span><span class="p">(</span><span class="n">num_steps</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">nbins</span><span class="p">,</span> <span class="n">num_cols</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">r</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="mi">0</span><span class="p">,:,</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="n">f_iter</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+<div class="viewcode-block" id="RDF.average"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.rdf.RDF.average">[docs]</a>    <span class="k">def</span> <span class="nf">average</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Computing average RDF in time.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">computed_avg</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">mean</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="RDF.plot_rdf"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.rdf.RDF.plot_rdf">[docs]</a>    <span class="k">def</span> <span class="nf">plot_rdf</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">step_num</span><span class="p">,</span> <span class="n">clear</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">smoothing</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Plots RDF as a function of the interparticle distance (``r``).</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        step_num : int</span>
+<span class="sd">            Index within :attr:`~mdhandle.rdf.RDF.data` to select</span>
+<span class="sd">            one set of RDF data.</span>
+<span class="sd">        clear : boolean, [default=True]</span>
+<span class="sd">            If ``True``, creates new figure for RDF plot.</span>
+<span class="sd">            If ``False``, RDF plot is created on existing matplotlib window</span>
+<span class="sd">            if it exists.</span>
+<span class="sd">        smoothing : boolean,  [default=False]</span>
+<span class="sd">            If ``True``, use :meth:`scipy.interp1d` to do cubic interpolation</span>
+<span class="sd">            to RDF data to produce a smoother line.</span>
+<span class="sd">            If ``False``, plots raw RDF data.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">            Pointer to :meth:`matplotlib` figure containing RDF data.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">rdf_to_plot</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">step_num</span><span class="p">,:,:]</span>
+        <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Plotting RDF from timestep </span><span class="si">%d</span><span class="s">&#39;</span> <span class="o">%</span>
+                                                        <span class="bp">self</span><span class="o">.</span><span class="n">times</span><span class="p">[</span><span class="n">step_num</span><span class="p">])</span>
+
+        <span class="k">if</span> <span class="n">clear</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+        <span class="k">if</span> <span class="n">smoothing</span> <span class="ow">is</span> <span class="bp">False</span><span class="p">:</span>
+            <span class="k">return</span> <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="n">rdf_to_plot</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span>
+        <span class="k">elif</span> <span class="n">smoothing</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="n">interp_res</span> <span class="o">=</span> <span class="n">interp1d</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="n">rdf_to_plot</span><span class="p">[:,</span><span class="mi">1</span><span class="p">],</span> <span class="n">kind</span><span class="o">=</span><span class="s">&#39;cubic&#39;</span><span class="p">)</span>
+            <span class="n">xnew</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">linspace</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="o">.</span><span class="n">min</span><span class="p">(),</span> <span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="o">.</span><span class="n">max</span><span class="p">(),</span> <span class="mi">10</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">nbins</span><span class="p">)</span>
+            <span class="k">return</span> <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">xnew</span><span class="p">,</span> <span class="n">interp_res</span><span class="p">(</span><span class="n">xnew</span><span class="p">))</span>
+</div>
+<div class="viewcode-block" id="RDF.plot_rdf_movie"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.rdf.RDF.plot_rdf_movie">[docs]</a>    <span class="k">def</span> <span class="nf">plot_rdf_movie</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">clear</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">save</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">fmt</span><span class="o">=</span><span class="s">&#39;.png&#39;</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Plot sequence of RDF output for each timestep in the RDF data file.</span>
+
+<span class="sd">        Intention is for diagnostic use only as no plotting controls and</span>
+<span class="sd">        file name control.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        clear : boolean, [default=True]</span>
+<span class="sd">            If ``True``, creates new figure for RDF plot.</span>
+<span class="sd">            If ``False``, RDF plot is created on existing matplotlib window</span>
+<span class="sd">            if it exists.</span>
+<span class="sd">        save : boolean,  [default=True]</span>
+<span class="sd">            If ``True`` - plotting output is saved to disk.</span>
+<span class="sd">        fmt : string,  [default=&#39;.png&#39;]</span>
+<span class="sd">            String defining output file format for matplotlib.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">clf</span><span class="p">()</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">r</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">data</span><span class="p">[</span><span class="n">i</span><span class="p">,:,</span><span class="mi">1</span><span class="p">])</span>
+            <span class="k">if</span> <span class="n">save</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+                <span class="n">plt</span><span class="o">.</span><span class="n">savefig</span><span class="p">(</span><span class="nb">str</span><span class="p">(</span><span class="n">i</span><span class="p">)</span><span class="o">+</span><span class="n">fmt</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">plt</span><span class="o">.</span><span class="n">draw</span><span class="p">()</span>
+            <span class="k">if</span> <span class="n">clear</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+                <span class="n">plt</span><span class="o">.</span><span class="n">clf</span><span class="p">()</span>
+
+
+<span class="c"># ============================================================================</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../readers.html" >mdhandle.readers</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

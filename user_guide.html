@@ -1,0 +1,213 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>User Guide &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="_static/jquery.js"></script>
+    <script type="text/javascript" src="_static/underscore.js"></script>
+    <script type="text/javascript" src="_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="index.html" />
+    <link rel="next" title="Reference Documentation" href="reference.html" />
+    <link rel="prev" title="Tutorial" href="tutorial.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="reference.html" title="Reference Documentation"
+             accesskey="N">next</a> |</li>
+        <li class="right" >
+          <a href="tutorial.html" title="Tutorial"
+             accesskey="P">previous</a> |</li>
+        <li><a href="index.html">mdhandle v0.9a documentation</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <div class="section" id="user-guide">
+<h1>User Guide<a class="headerlink" href="#user-guide" title="Permalink to this headline">¶</a></h1>
+<div class="admonition warning">
+<p class="first admonition-title">Warning</p>
+<p class="last">To be developed, v0.9</p>
+</div>
+<div class="section" id="snap-metadata">
+<h2>snap metadata<a class="headerlink" href="#snap-metadata" title="Permalink to this headline">¶</a></h2>
+<ul class="simple">
+<li><tt class="docutils literal"><span class="pre">col_mapping</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">vectors</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">tensors</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">symm_tensors</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">sim_cell</span></tt></li>
+</ul>
+<p>Within the <tt class="xref py py-attr docutils literal"><span class="pre">Snap.meta</span></tt> dictionary the following metadata is required :</p>
+<ul>
+<li><p class="first"><tt class="docutils literal"><span class="pre">grid_type</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">xlo</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">xhi</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">ylo</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">yhi</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">zlo</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">zhi</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">num_atoms</span></tt></p>
+</li>
+<li><dl class="first docutils">
+<dt><tt class="docutils literal"><span class="pre">col_mapping</span></tt> :</dt>
+<dd><ul class="first last simple">
+<li>List of all scalar values and their associated metadata.</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt><tt class="docutils literal"><span class="pre">vectors</span></tt> :</dt>
+<dd><ul class="first last simple">
+<li>List of all vector values and their associated metadata.</li>
+</ul>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt><tt class="docutils literal"><span class="pre">tensors</span></tt> :</dt>
+<dd><p class="first last">List of all tensor values and their associated metadata.</p>
+</dd>
+</dl>
+</li>
+<li><dl class="first docutils">
+<dt><tt class="docutils literal"><span class="pre">symm_tensors</span></tt> :</dt>
+<dd><p class="first last">List of all symmetric tensor values and their associated metadata.</p>
+</dd>
+</dl>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">comments</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">time</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">units</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">sim_name</span></tt></p>
+</li>
+<li><p class="first"><tt class="docutils literal"><span class="pre">timestep</span></tt></p>
+</li>
+</ul>
+<div class="section" id="gridded">
+<h3>Gridded<a class="headerlink" href="#gridded" title="Permalink to this headline">¶</a></h3>
+<p>For gridded datasets the following items are also added to the
+<tt class="xref py py-attr docutils literal"><span class="pre">Snap.meta</span></tt> :</p>
+<ul class="simple">
+<li><tt class="docutils literal"><span class="pre">origin</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">num_elem</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">boxL</span></tt></li>
+<li><tt class="docutils literal"><span class="pre">grid_spacing</span></tt></li>
+</ul>
+</div>
+</div>
+</div>
+
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+  <h3><a href="index.html">Table Of Contents</a></h3>
+  <ul>
+<li><a class="reference internal" href="#">User Guide</a><ul>
+<li><a class="reference internal" href="#snap-metadata">snap metadata</a><ul>
+<li><a class="reference internal" href="#gridded">Gridded</a></li>
+</ul>
+</li>
+</ul>
+</li>
+</ul>
+
+  <h4>Previous topic</h4>
+  <p class="topless"><a href="tutorial.html"
+                        title="previous chapter">Tutorial</a></p>
+  <h4>Next topic</h4>
+  <p class="topless"><a href="reference.html"
+                        title="next chapter">Reference Documentation</a></p>
+  <h3>This Page</h3>
+  <ul class="this-page-menu">
+    <li><a href="_sources/user_guide.txt"
+           rel="nofollow">Show Source</a></li>
+  </ul>
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="reference.html" title="Reference Documentation"
+             >next</a> |</li>
+        <li class="right" >
+          <a href="tutorial.html" title="Tutorial"
+             >previous</a> |</li>
+        <li><a href="index.html">mdhandle v0.9a documentation</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

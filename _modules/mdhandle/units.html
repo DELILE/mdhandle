@@ -1,0 +1,693 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.units &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.units</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Handle units and unit conversions for output from LAMMPS in lj, metal</span>
+<span class="sd">and si units.</span>
+
+<span class="sd">For description of unit systems in LAMMPS see</span>
+<span class="sd">http://lammps.sandia.gov/doc/units.html</span>
+
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c"># TODO: Integrate conversion cosntants and helper classes</span>
+<span class="c"># TODO: Add other LAMMPS unit systems (e.g. &#39;real&#39;, &#39;cms&#39;, etc.)</span>
+<span class="c"># TODO: Source of constants --&gt; linkup with values used in LAMMPS.</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="n">UNITS_ALLOWED</span> <span class="o">=</span> <span class="p">[</span><span class="s">&#39;lj&#39;</span><span class="p">,</span> <span class="s">&#39;metal&#39;</span><span class="p">,</span> <span class="s">&#39;si&#39;</span><span class="p">]</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+<span class="c">#    Constants</span>
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="n">AMU</span> <span class="o">=</span> <span class="mf">1.66053886e-27</span>            <span class="c"># [kg/amu]</span>
+<span class="n">eV</span> <span class="o">=</span> <span class="mf">1.60217646e-19</span>             <span class="c"># [J/eV]</span>
+
+<span class="c"># Boltzmann&#39;s constant for each unit type - can be used as is within </span>
+<span class="c"># calculations in each unit type when other unit correction factors are used.</span>
+<span class="n">KBOLTZ</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">KBOLTZ</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.3806504e-23</span>             <span class="c"># [J/K]</span>
+<span class="n">KBOLTZ</span><span class="p">[</span><span class="s">&#39;lj&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                       <span class="c"># non-dimensional LAMMPS LJ units</span>
+<span class="n">KBOLTZ</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">KBOLTZ</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="n">eV</span>      <span class="c"># [eV / K]</span>
+
+
+<span class="n">AVAGADRO</span> <span class="o">=</span> <span class="mf">6.0221415e23</span>                  <span class="c"># non-dimensional</span>
+<span class="n">LIGHT_SPEED</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">LIGHT_SPEED</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">2.99792458e8</span>         <span class="c"># [m/s]</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+<span class="c">#    Unit Conversion Factors</span>
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="c"># Used to produce multiplicative factors to produce the right units.</span>
+<span class="c"># The purpose of each factor is to bring the units into form where </span>
+<span class="c"># calculations can be done.  For &#39;LJ&#39; and &#39;si&#39;, this isn&#39;t necessary, so 1.0 is # used throughout.  However, for &#39;metal&#39; care must be used when converting to</span>
+<span class="c"># SI.</span>
+
+<span class="c"># See mdhandle.properties.snap_properties for examples of use.</span>
+
+<span class="n">MASS</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">MASS</span><span class="p">[</span><span class="s">&#39;lj&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>        <span class="c"># non-dimensional LAMMPS LJ units</span>
+<span class="n">MASS</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>        <span class="c"># [kg]</span>
+<span class="n">MASS</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">AMU</span>     <span class="c"># [kg/AMU] - LAMMPS metal units</span>
+
+<span class="n">LENGTH</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">LENGTH</span><span class="p">[</span><span class="s">&#39;lj&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                <span class="c"># non-dimensional LAMMPS LJ units</span>
+<span class="n">LENGTH</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                <span class="c"># [m]</span>
+<span class="n">LENGTH</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1e-10</span>           <span class="c"># [m / Ang]</span>
+
+<span class="n">TIME</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">TIME</span><span class="p">[</span><span class="s">&#39;lj&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>            <span class="c"># non-dimensional LAMMPS LJ units</span>
+<span class="n">TIME</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>            <span class="c"># [s]</span>
+<span class="n">TIME</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1e-12</span>       <span class="c"># [s / ps] - LAMMPS metal units</span>
+
+<span class="n">FORCE</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">FORCE</span><span class="p">[</span><span class="s">&#39;lj&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                                <span class="c"># non-dimensional LJ units</span>
+<span class="n">FORCE</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                                <span class="c"># [N]</span>
+<span class="n">FORCE</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">eV</span> <span class="o">/</span> <span class="n">LENGTH</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span>           <span class="c"># [J/eV * Ang / m]</span>
+
+<span class="n">ENERGY</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">ENERGY</span><span class="p">[</span><span class="s">&#39;lj&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                    <span class="c"># non-dimensional LAMMPS LJ units</span>
+<span class="n">ENERGY</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                    <span class="c"># [J]</span>
+<span class="n">ENERGY</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">eV</span>                  <span class="c"># [J / eV] - LAMMPS metal units</span>
+
+<span class="n">VELOCITY</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">VELOCITY</span><span class="p">[</span><span class="s">&#39;lj&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                                 <span class="c"># non-dimensional LJ units</span>
+<span class="n">VELOCITY</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                                 <span class="c"># [m/s]</span>
+<span class="n">VELOCITY</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="n">LENGTH</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span> <span class="o">/</span> <span class="n">TIME</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span>  <span class="c"># [m / ang * ps/s]</span>
+
+<span class="n">PRESSURE</span> <span class="o">=</span> <span class="p">{}</span>
+<span class="n">PRESSURE</span><span class="p">[</span><span class="s">&#39;lj&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                      <span class="c"># non-dimensional LAMMPS LJ units</span>
+<span class="n">PRESSURE</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1.0</span>                      <span class="c"># [Pa]</span>
+<span class="n">PRESSURE</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="mf">1e5</span>                   <span class="c"># [Pa / bar] (convert to si)</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+<span class="c">#    Helper Unit Conversion Classes - Useful from the cmd line</span>
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="LJUnits"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits">[docs]</a><span class="k">class</span> <span class="nc">LJUnits</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Helper object used to convert LJ units to SI units</span>
+
+<span class="sd">    Each method returns a parameter converted to SI units from</span>
+<span class="sd">    non-dimensional LJ units as defined by the sigma, epsilon and mass.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    sigma : float, [default=3.405]</span>
+<span class="sd">        :math:`\sigma` parameter for 12-6 LJ potential in angstroms.</span>
+<span class="sd">    epsilon_kb : float, [default=119.8]</span>
+<span class="sd">        :math:`\epsilon / k_b`, where :math:`\epsilon` is energy parameter</span>
+<span class="sd">        for 12-6 LJ potential in K.</span>
+<span class="sd">    m : float, [default=39.95]</span>
+<span class="sd">        Atomic mass in AMU.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    sigma : float</span>
+<span class="sd">        :math:`\sigma` parameter for 12-6 LJ potential in m.</span>
+<span class="sd">    epsilon_kb : float</span>
+<span class="sd">        :math:`\epsilon / k_b`, where :math:`\epsilon` is energy parameter</span>
+<span class="sd">        for 12-6 LJ potential in K.</span>
+<span class="sd">    m : float</span>
+<span class="sd">        Atomic mass in Kg.</span>
+<span class="sd">    epsilon : float</span>
+<span class="sd">        :math:`\epsilon` energy parameter for 12-6 LJ potential in J.</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    --------</span>
+<span class="sd">    real_length(len_star)</span>
+<span class="sd">        Convert non-dim LJ length to m.</span>
+<span class="sd">    real_temp(temp_star)</span>
+<span class="sd">        Convert non-dim LJ temperature to Kelvins.</span>
+<span class="sd">    real_energy(nrg_star)</span>
+<span class="sd">        Convert non-dim LJ energy to Joules.</span>
+<span class="sd">    real_press(press_star)</span>
+<span class="sd">        Convert non-dim LJ pressure to Pa.</span>
+<span class="sd">    real_num_dens(nd_star)</span>
+<span class="sd">        Convert non-dim LJ number density to [atoms/m^3]</span>
+<span class="sd">    real_time(t_star)</span>
+<span class="sd">        Convert non-dim LJ time to sec.</span>
+<span class="sd">    real_velocity(v_star)</span>
+<span class="sd">        Convert non-dim LJ velocity to [m/s].</span>
+<span class="sd">    real_force(f_star)</span>
+<span class="sd">        Convert non-dim LJ force to N.</span>
+<span class="sd">    real_surface_tension(gamma_star)</span>
+<span class="sd">        Convert non-dim LJ surface tension to [N/m].</span>
+<span class="sd">    real_viscosity(mu_star)</span>
+<span class="sd">        Convert non-dim LJ viscosity to [Pa.s].</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ------------</span>
+<span class="sd">    http://lammps.sandia.gov/doc/units.html</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="mf">3.405</span><span class="p">,</span> <span class="n">epsilon_kb</span><span class="o">=</span><span class="mf">119.8</span><span class="p">,</span> <span class="n">m</span><span class="o">=</span><span class="mf">39.95</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span> <span class="o">=</span> <span class="n">sigma</span><span class="o">*</span><span class="mf">1.e-10</span>       <span class="c"># [m]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epsilon_kb</span> <span class="o">=</span> <span class="n">epsilon_kb</span>    <span class="c"># [K]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">m</span> <span class="o">=</span> <span class="n">m</span><span class="o">*</span><span class="n">AMU</span>                  <span class="c"># [kg]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">epsilon_kb</span> <span class="o">*</span> <span class="n">KBOLTZ</span><span class="p">[</span><span class="s">&#39;si&#39;</span><span class="p">]</span>    <span class="c"># [J]</span>
+
+<div class="viewcode-block" id="LJUnits.real_length"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits.real_length">[docs]</a>    <span class="k">def</span> <span class="nf">real_length</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">len_star</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert non-dim LJ length to m.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        len_star : float</span>
+<span class="sd">            Non-dimensional length.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        len_si : float</span>
+<span class="sd">            Length in m.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">len_si</span> <span class="o">=</span> <span class="n">len_star</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span>
+        <span class="k">return</span> <span class="n">len_si</span>
+</div>
+<div class="viewcode-block" id="LJUnits.real_temp"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits.real_temp">[docs]</a>    <span class="k">def</span> <span class="nf">real_temp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">temp_star</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert non-dim LJ temperature to Kelvins.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        temp_star : float</span>
+<span class="sd">            Non-dimensional temperature.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        temp_si : float</span>
+<span class="sd">            Temperature in Kelvins.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">temp_si</span> <span class="o">=</span> <span class="n">temp_star</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon_kb</span>
+        <span class="k">return</span> <span class="n">temp_si</span>
+</div>
+<div class="viewcode-block" id="LJUnits.real_energy"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits.real_energy">[docs]</a>    <span class="k">def</span> <span class="nf">real_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nrg_star</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert non-dim LJ energy to J.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        nrg_star : float</span>
+<span class="sd">            Non-dimensional energy.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        nrg_si : real</span>
+<span class="sd">            Energy in J.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">nrg_si</span> <span class="o">=</span> <span class="n">nrg_star</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span>
+        <span class="k">return</span> <span class="n">nrg_si</span>
+</div>
+<div class="viewcode-block" id="LJUnits.real_press"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits.real_press">[docs]</a>    <span class="k">def</span> <span class="nf">real_press</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">press_star</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert non-dim LJ pressure to Pa.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        press_star : float</span>
+<span class="sd">            Non-dimensional pressure.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        press_si : float</span>
+<span class="sd">            Pressure in Pa.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">press_si</span> <span class="o">=</span> <span class="n">press_star</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">**</span><span class="mi">3</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">press_si</span>
+</div>
+<div class="viewcode-block" id="LJUnits.real_num_dens"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits.real_num_dens">[docs]</a>    <span class="k">def</span> <span class="nf">real_num_dens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nd_star</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert non-dim LJ number density to [atoms/m^3].</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        nd_star : float</span>
+<span class="sd">            Non-dimensional number density.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        nd_si : float</span>
+<span class="sd">            Number density in [atoms/m^3].</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">nd_si</span> <span class="o">=</span> <span class="n">nd_star</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">**</span><span class="mi">3</span>
+        <span class="k">return</span> <span class="n">nd_si</span>
+</div>
+<div class="viewcode-block" id="LJUnits.real_time"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits.real_time">[docs]</a>    <span class="k">def</span> <span class="nf">real_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t_star</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert non-dim LJ time to sec.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        t_star : float</span>
+<span class="sd">            Non-dimensional time.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        t_si : float</span>
+<span class="sd">            Time in sec.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">t_si</span> <span class="o">=</span> <span class="n">t_star</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">m</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">t_si</span>
+</div>
+<div class="viewcode-block" id="LJUnits.real_velocity"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits.real_velocity">[docs]</a>    <span class="k">def</span> <span class="nf">real_velocity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">v_star</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert non-dim LJ velocity to m/s.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        v_star : float</span>
+<span class="sd">            Non-dimensional velocity.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        v_si : float</span>
+<span class="sd">            Velocity in m/s.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">v_si</span> <span class="o">=</span> <span class="n">v_star</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">m</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">v_si</span>
+</div>
+<div class="viewcode-block" id="LJUnits.real_force"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits.real_force">[docs]</a>    <span class="k">def</span> <span class="nf">real_force</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f_star</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert non-dim LJ force to N.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        f_star : float</span>
+<span class="sd">            Non-dimensional force.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        f_si : float</span>
+<span class="sd">            Force in N.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">f_si</span> <span class="o">=</span> <span class="n">f_star</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">f_si</span>
+</div>
+<div class="viewcode-block" id="LJUnits.real_surface_tension"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits.real_surface_tension">[docs]</a>    <span class="k">def</span> <span class="nf">real_surface_tension</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gamma_star</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert non-dim LJ surface tension to [N/m].</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        gamma_star : float</span>
+<span class="sd">            Non-dimensional surface tension.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        gamma_si : float</span>
+<span class="sd">            Survace tension in [N/m].</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">gamma_si</span> <span class="o">=</span> <span class="n">gamma_star</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">gamma_si</span>
+</div>
+<div class="viewcode-block" id="LJUnits.real_viscosity"><a class="viewcode-back" href="../../reference.html#mdhandle.units.LJUnits.real_viscosity">[docs]</a>    <span class="k">def</span> <span class="nf">real_viscosity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mu_star</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert non-dim LJ viscosity to [Pa.s].</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        mu_star : float</span>
+<span class="sd">            Non-dimensional viscosity.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        mu_si : float</span>
+<span class="sd">            Viscosity in [Pa.s].</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">mu_si</span> <span class="o">=</span> <span class="n">mu_star</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">mu_si</span>
+
+</div></div>
+<div class="viewcode-block" id="MetalUnits"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits">[docs]</a><span class="k">class</span> <span class="nc">MetalUnits</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Helper class used to convert metal units to non-dimensional LJ units.</span>
+
+<span class="sd">    Each method returns a parameter converted to non-dimensional</span>
+<span class="sd">    LJ units from LAMMPS metal units as defined by</span>
+<span class="sd">    sigma, epsilon and mass.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    sigma : float, [default=3.405]</span>
+<span class="sd">        :math:`\sigma` parameter for 12-6 LJ potential in angstroms.</span>
+<span class="sd">    epsilon_kb : float, [default=119.8]</span>
+<span class="sd">        :math:`\epsilon / k_b`, where :math:`\epsilon` is energy parameter</span>
+<span class="sd">        for 12-6 LJ potential. in K.</span>
+<span class="sd">    m : float, [default=39.95]</span>
+<span class="sd">        Atomic mass in AMU.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    ----------</span>
+<span class="sd">    sigma : float</span>
+<span class="sd">        :math:`\sigma` parameter for 12-6 LJ potential in angstrom.</span>
+<span class="sd">    epsilon_kb : float</span>
+<span class="sd">        :math:`\epsilon / k_b`, where :math:`\epsilon` is energy</span>
+<span class="sd">        parameter for 12-6 LJ potential in K.</span>
+<span class="sd">    epsilon : float</span>
+<span class="sd">        epsilon parameter from 12-6 LJ potential function.</span>
+<span class="sd">    m : float</span>
+<span class="sd">        Atomic mass in AMU.</span>
+
+<span class="sd">    Methods</span>
+<span class="sd">    --------</span>
+<span class="sd">    LJ_length(len_metal)</span>
+<span class="sd">        Convert length to non-dim LJ units.</span>
+<span class="sd">    LJ_temp(temp_metal)</span>
+<span class="sd">        Convert temperature to non-dim LJ units.</span>
+<span class="sd">    LJ_time(t_metal)</span>
+<span class="sd">        Convert time to non-dim LJ units.</span>
+<span class="sd">    LJ_energy(nrg_metal)</span>
+<span class="sd">        Convert energy to non-dim LJ units.</span>
+<span class="sd">    LJ_num_dens(nd_metal)</span>
+<span class="sd">        Convert number density to non-dim LJ units.</span>
+<span class="sd">    LJ_press(press_metal)</span>
+<span class="sd">        Convert pressure to non-dim LJ units.</span>
+<span class="sd">    LJ_velocity(v_metal)</span>
+<span class="sd">        Convert velocity to non-dim LJ units.</span>
+<span class="sd">    LJ_surface_tension(gamma_metal)</span>
+<span class="sd">        Convert surface tension to non-dim LJ units.</span>
+<span class="sd">    LJ_viscosity(mu_metal)</span>
+<span class="sd">        Convert viscosity to non-dim LJ units.</span>
+
+<span class="sd">    References</span>
+<span class="sd">    ------------</span>
+<span class="sd">    http://lammps.sandia.gov/doc/units.html</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">sigma</span><span class="o">=</span><span class="mf">3.405</span><span class="p">,</span> <span class="n">epsilon_kb</span><span class="o">=</span><span class="mf">119.8</span><span class="p">,</span> <span class="n">m</span><span class="o">=</span><span class="mf">39.95</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span> <span class="o">=</span> <span class="n">sigma</span>                              <span class="c"># [\angstrom]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epsilon_kb</span> <span class="o">=</span> <span class="n">epsilon_kb</span>                    <span class="c"># [K]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">m</span> <span class="o">=</span> <span class="n">m</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">epsilon_kb</span> <span class="o">*</span> <span class="n">KBOLTZ</span><span class="p">[</span><span class="s">&#39;metal&#39;</span><span class="p">]</span>   <span class="c"># [J]</span>
+
+<div class="viewcode-block" id="MetalUnits.LJ_length"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits.LJ_length">[docs]</a>    <span class="k">def</span> <span class="nf">LJ_length</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">len_metal</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert metal length to non-dim LJ units.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        len_metal : float</span>
+<span class="sd">            Metal units length.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        len_lj : float</span>
+<span class="sd">             Non-dim LJ length.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">len_lj</span> <span class="o">=</span> <span class="n">len_metal</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span>
+        <span class="k">return</span> <span class="n">len_lj</span>
+</div>
+<div class="viewcode-block" id="MetalUnits.LJ_temp"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits.LJ_temp">[docs]</a>    <span class="k">def</span> <span class="nf">LJ_temp</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">temp_metal</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert metal temperature [K] to non-dim LJ units.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        temp_metal : float</span>
+<span class="sd">            Metal units temperature [K].</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        temp_lj : float</span>
+<span class="sd">             Non-dim LJ temperature.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">temp_lj</span> <span class="o">=</span> <span class="n">temp_metal</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon_kb</span>
+        <span class="k">return</span> <span class="n">temp_lj</span>
+</div>
+<div class="viewcode-block" id="MetalUnits.LJ_energy"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits.LJ_energy">[docs]</a>    <span class="k">def</span> <span class="nf">LJ_energy</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nrg_metal</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert metal energy to non-dim LJ units.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        nrg_metal : float</span>
+<span class="sd">            Metal units energy.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        nrg_lj : float</span>
+<span class="sd">             Non-dim LJ energy.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">nrg_lj</span> <span class="o">=</span> <span class="n">nrg_metal</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span>
+        <span class="k">return</span> <span class="n">nrg_lj</span>
+</div>
+<div class="viewcode-block" id="MetalUnits.LJ_num_dens"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits.LJ_num_dens">[docs]</a>    <span class="k">def</span> <span class="nf">LJ_num_dens</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">nd_metal</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert metal units number density to non-dim LJ units.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        nd_metal : float</span>
+<span class="sd">            Metal units number density.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        nd_lj : float</span>
+<span class="sd">             Non-dim LJ number density.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">nd_lj</span> <span class="o">=</span> <span class="n">nd_metal</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">**</span><span class="mi">3</span>
+        <span class="k">return</span> <span class="n">nd_lj</span>
+</div>
+<div class="viewcode-block" id="MetalUnits.LJ_press"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits.LJ_press">[docs]</a>    <span class="k">def</span> <span class="nf">LJ_press</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">press_metal</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert metal units pressure to non-dim LJ units.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        press_metal : float</span>
+<span class="sd">            Metal units pressure.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        press_lj : float</span>
+<span class="sd">             Non-dim LJ pressure.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">press_lj</span> <span class="o">=</span> <span class="n">press_metal</span><span class="o">*</span><span class="mf">1e5</span> <span class="o">*</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">*</span><span class="mf">1e-10</span><span class="p">)</span><span class="o">**</span><span class="mi">3</span> <span class="o">/</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="o">*</span><span class="n">eV</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">press_lj</span>
+</div>
+<div class="viewcode-block" id="MetalUnits.LJ_time"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits.LJ_time">[docs]</a>    <span class="k">def</span> <span class="nf">LJ_time</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">t_metal</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert metal units time to non-dim LJ units.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        t_metal : float</span>
+<span class="sd">            Metal units time.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        t_lj : float</span>
+<span class="sd">             Non-dim LJ time.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">t_lj</span> <span class="o">=</span> <span class="n">t_metal</span><span class="o">*</span><span class="mf">1e-12</span> <span class="o">*</span> <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="o">*</span><span class="n">eV</span> <span class="o">/</span>
+                                        <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="o">*</span><span class="n">AMU</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">*</span><span class="mf">1e-10</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">t_lj</span>
+</div>
+<div class="viewcode-block" id="MetalUnits.LJ_velocity"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits.LJ_velocity">[docs]</a>    <span class="k">def</span> <span class="nf">LJ_velocity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">v_metal</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert metal units velocity to non-dim LJ units.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        v_metal : float</span>
+<span class="sd">            Metal units velocity.</span>
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        v_lj : float</span>
+<span class="sd">             Non-dim LJ velocity.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">v_lj</span> <span class="o">=</span> <span class="n">v_metal</span><span class="o">*</span><span class="p">(</span><span class="mf">1e-10</span><span class="o">/</span><span class="mf">1e-12</span><span class="p">)</span><span class="o">*</span><span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="o">*</span><span class="n">AMU</span> <span class="o">/</span> <span class="p">(</span><span class="n">eV</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">v_lj</span>
+</div>
+<div class="viewcode-block" id="MetalUnits.LJ_force"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits.LJ_force">[docs]</a>    <span class="k">def</span> <span class="nf">LJ_force</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">f_metal</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert metal units force to non-dim LJ units.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        f_metal : float</span>
+<span class="sd">            Metal units force.</span>
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        f_lj : float</span>
+<span class="sd">             Non-dim LJ force.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">f_lj</span> <span class="o">=</span> <span class="n">f_metal</span> <span class="o">*</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">f_lj</span>
+</div>
+<div class="viewcode-block" id="MetalUnits.LJ_surface_tension"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits.LJ_surface_tension">[docs]</a>    <span class="k">def</span> <span class="nf">LJ_surface_tension</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">gamma_metal</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        .. note:: </span>
+<span class="sd">           **v0.9 - NOT IMPLEMENTED**</span>
+
+<span class="sd">        Convert metal units surface tension to non-dim LJ units.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        gamma_metal : float</span>
+<span class="sd">            Metal units surface tension.</span>
+
+<span class="sd">        Raises</span>
+<span class="sd">        -------</span>
+<span class="sd">            NotImplementedError</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># TODO: Replace with logger call.</span>
+        <span class="k">raise</span> <span class="ne">NotImplementedError</span><span class="p">(</span><span class="s">&#39;LJ_surface_tension method not implemented&#39;</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="MetalUnits.LJ_viscosity"><a class="viewcode-back" href="../../reference.html#mdhandle.units.MetalUnits.LJ_viscosity">[docs]</a>    <span class="k">def</span> <span class="nf">LJ_viscosity</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mu_metal</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Convert metal units viscosity to non-dim LJ units.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        mu_metal : float</span>
+<span class="sd">            Metal units viscosity.</span>
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        mu_lj : float</span>
+<span class="sd">             Non-dim LJ viscosity.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">mu_lj</span> <span class="o">=</span> <span class="n">mu_metal</span><span class="o">*</span><span class="mf">0.1</span> <span class="o">/</span> <span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">sigma</span><span class="o">*</span><span class="mf">1e-10</span><span class="p">)</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span>
+                                        <span class="n">np</span><span class="o">.</span><span class="n">sqrt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">m</span><span class="o">*</span><span class="n">AMU</span><span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">epsilon</span><span class="o">*</span><span class="n">eV</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">mu_lj</span>
+
+
+ <span class="c">#=============================================================================</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

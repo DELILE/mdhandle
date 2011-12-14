@@ -1,0 +1,708 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.simcontainer &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.simcontainer</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Wrapper on set of simulation results.  :class:SimContainer objects are used</span>
+<span class="sd">to hold and analyze a number of simulation snapshots.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c"># TODO: Add metadata organizing functions</span>
+<span class="c"># TODO: Add method to delete and/or pop snaps from SimContainer collection</span>
+<span class="c"># TODO: Add check for SimCell object constant through snaps in SimContainer.</span>
+<span class="c"># TODO: Add ability to act only slice of slist within generators</span>
+
+
+<span class="c">#-----------------------------------------------------------------------------</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">import</span> <span class="nn">resource</span>
+
+<span class="kn">from</span> <span class="nn">mdhandle.snap</span> <span class="kn">import</span> <span class="n">Snap</span>
+<span class="kn">from</span> <span class="nn">mdhandle.readers.log</span> <span class="kn">import</span> <span class="n">Log</span>
+<span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
+<span class="kn">from</span> <span class="nn">mdhandle</span> <span class="kn">import</span> <span class="n">utilities</span> <span class="k">as</span> <span class="n">util</span>
+
+<span class="c">#-----------------------------------------------------------------------------</span>
+
+<span class="c">#-----------------------------------------------------------------------------</span>
+
+<div class="viewcode-block" id="SimContainer"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer">[docs]</a><span class="k">class</span> <span class="nc">SimContainer</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Wrapper on set of simulation results.  :class:`SimContainer` objects are </span>
+<span class="sd">    used to hold and analyze a number of simulation snapshots.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    flist : iterable</span>
+<span class="sd">        List of HDF files containing a snapshots of simulation restuls.</span>
+<span class="sd">        Each file in ``flist`` becomes a :class:`Snap` object.</span>
+<span class="sd">    dataset_name : string, [default=&#39;rawSimResulsts&#39;]</span>
+<span class="sd">        Name of dataset to activate within each snapshot.</span>
+<span class="sd">        Default ``&#39;rawSimResulsts&#39;`` is always present and contains</span>
+<span class="sd">        the atomwise MD simulation output.</span>
+<span class="sd">    verbose : boolean, [default=False]</span>
+<span class="sd">        Boolean flag for the verbosity of user input/output.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    slist : list</span>
+<span class="sd">        List of :class:`mdhandle.snap.Snap` objects in :class:`SimContainer`.</span>
+<span class="sd">    _max_open : int</span>
+<span class="sd">        Maximum number of files that can be open in Python.</span>
+<span class="sd">    nsnaps : int</span>
+<span class="sd">        Number of snapshots within the :class:`SimContainer`.</span>
+<span class="sd">    times : list</span>
+<span class="sd">        List of time stamps for snaps within :class:`SimContainer`.</span>
+<span class="sd">    selections : list</span>
+<span class="sd">        List of selections active in snaps within :class:`SimContainer`.</span>
+<span class="sd">    active_dataset_name : string</span>
+<span class="sd">        Name of active dataset within snaps within :class:`SimContainer`.</span>
+<span class="sd">    meta : dict</span>
+<span class="sd">        Mapping of all simulation metadata.</span>
+<span class="sd">    col_mapping : dict</span>
+<span class="sd">        Metadata mapping for scalar collections.</span>
+<span class="sd">    vectors : dict</span>
+<span class="sd">        Dictionary of vector collections.</span>
+<span class="sd">    tensors : dict</span>
+<span class="sd">        Dictionary of tensor collections.</span>
+<span class="sd">    symm_tensors : dict</span>
+<span class="sd">        Dictionary of symmetric tensor collections.</span>
+<span class="sd">    is_constant : dict</span>
+<span class="sd">        Dictionary sorring boolean values for constant metadata in container.</span>
+<span class="sd">    sim_cell : :class:`mdhandle.sim_cell.SimCell`</span>
+<span class="sd">    LAMMPS_log : :class:`mdhandle.readers.log.Log`</span>
+<span class="sd">        LAMMPS log file handle.</span>
+<span class="sd">    logger : :class:`mdhandle.logger.Logger`</span>
+<span class="sd">    verbose : boolean</span>
+<span class="sd">        If ``True``, verbose user I/O.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">flist</span><span class="p">,</span> <span class="n">dataset_name</span><span class="o">=</span><span class="s">&#39;rawSimResults&#39;</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span> <span class="o">=</span> <span class="n">Logger</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">flist</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;SimContainer: List of files is empty&#39;</span><span class="p">)</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;List of files in simContainer:&#39;</span><span class="p">)</span>
+                <span class="n">util</span><span class="o">.</span><span class="n">print_file_list</span><span class="p">(</span><span class="n">flist</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_max_open</span> <span class="o">=</span> <span class="n">resource</span><span class="o">.</span><span class="n">getrlimit</span><span class="p">(</span><span class="n">resource</span><span class="o">.</span><span class="n">RLIMIT_NOFILE</span><span class="p">)[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="c"># Adding Snap objects to SimContainer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slist</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nsnaps</span> <span class="o">=</span> <span class="mi">0</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">times</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selections</span> <span class="o">=</span> <span class="p">[]</span>
+
+        <span class="c"># metadata  - Should be constant within SimContainer</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">col_mapping</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vectors</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span> <span class="o">=</span> <span class="p">{}</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_constant</span> <span class="o">=</span> <span class="p">{}</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sim_cell</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">LAMMPS_log</span> <span class="o">=</span> <span class="bp">None</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+        <span class="k">if</span> <span class="nb">isinstance</span><span class="p">(</span><span class="n">dataset_name</span><span class="p">,</span> <span class="nb">basestring</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">set_active_dataset</span><span class="p">(</span><span class="n">dataset_name</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Dataset name must be a string&#39;</span><span class="p">)</span>
+
+        <span class="n">flist</span><span class="p">,</span> <span class="n">fn_culled</span> <span class="o">=</span> <span class="n">util</span><span class="o">.</span><span class="n">cull_flist_by_function</span><span class="p">(</span><span class="n">flist</span><span class="p">,</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">exists</span><span class="p">,</span>
+                                                                   <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span><span class="p">)</span>
+        <span class="k">for</span> <span class="n">fn</span> <span class="ow">in</span> <span class="n">flist</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">add_snap</span><span class="p">(</span><span class="n">fn</span><span class="p">)</span>
+
+        <span class="c"># In case any snaps didn&#39;t work.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">flist</span> <span class="o">=</span> <span class="p">[</span><span class="n">snap</span><span class="o">.</span><span class="n">filename</span> <span class="k">for</span> <span class="n">snap</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+        <span class="c"># Testing for constant metadata across SimContainer.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">constant_props_test</span><span class="p">()</span>
+
+    <span class="k">def</span> <span class="nf">__repr__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prints single line unique text representation of</span>
+<span class="sd">        :class:`SimContainer` object.</span>
+<span class="sd">        </span>
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        string_rep : string</span>
+<span class="sd">            Single line string representation of :class:`simContainer`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">string_rep</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s"> - </span><span class="si">%s</span><span class="s"> - </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> \
+                    <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;sim_name&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">,</span> <span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
+        <span class="k">return</span> <span class="n">string_rep</span>
+
+    <span class="k">def</span> <span class="nf">__str__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Prints multiple line textual representation of </span>
+<span class="sd">        :class:`~mdhandle.simcontainer.SimContainer` object.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        -------</span>
+<span class="sd">        string_rep : string</span>
+<span class="sd">            Multiple line string representation of :class:`SimContainer`.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">string_rep</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
+<span class="s">======  SimContainer Object ======</span>
+<span class="s">Sim. Name: </span><span class="se">\t\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">Dataset Name: </span><span class="se">\t\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">Snaps: </span><span class="se">\t\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">Units: </span><span class="se">\t\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">Units Constant? </span><span class="se">\t\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">Num. Atoms: </span><span class="se">\t\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">Num. Atoms. Constant? </span><span class="se">\t\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">Box Constant? </span><span class="se">\t\t</span><span class="s"> </span><span class="si">%s</span><span class="s"></span>
+<span class="s">&quot;&quot;&quot;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;sim_name&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">flist</span><span class="p">)[:</span><span class="mi">60</span><span class="p">],</span>
+       <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_constant</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">],</span> 
+       <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">],</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_constant</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">],</span>
+       <span class="bp">self</span><span class="o">.</span><span class="n">is_constant</span><span class="p">[</span><span class="s">&#39;box&#39;</span><span class="p">])</span>
+
+        <span class="k">return</span> <span class="n">string_rep</span>
+
+<div class="viewcode-block" id="SimContainer.set_active_dataset"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.set_active_dataset">[docs]</a>    <span class="k">def</span> <span class="nf">set_active_dataset</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">reset_meta</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Sets active dataset in :class:`SimContainer` and attached snapshots.</span>
+
+<span class="sd">        The active dataset is the one available via other methods.</span>
+<span class="sd">        Dataset is selected by name at root (&#39;/&#39;) of HDF file.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        name : string</span>
+<span class="sd">            Name of active dataset.</span>
+<span class="sd">        reset_meta : boolean</span>
+<span class="sd">            If ``True``, metadata and selections in snap are reset.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span> <span class="o">=</span> <span class="n">name</span>
+
+        <span class="k">for</span> <span class="n">snap</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">:</span>
+            <span class="n">snap</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+            <span class="n">snap</span><span class="o">.</span><span class="n">set_active_dataset</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">reset_meta</span><span class="o">=</span><span class="n">reset_meta</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="n">reset_meta</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">selections</span> <span class="o">!=</span> <span class="p">[]:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Resetting metadata and selections.&#39;</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">reset_selections</span><span class="p">()</span>
+            <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">)</span> <span class="o">!=</span> <span class="mi">0</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="SimContainer.add_snap"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.add_snap">[docs]</a>    <span class="k">def</span> <span class="nf">add_snap</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_name</span><span class="p">,</span> <span class="n">test_constant</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds a new snap to SimContainer object.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        new_name : string</span>
+<span class="sd">           File name of :class:`Snap` file (HDF).</span>
+<span class="sd">        test_constant : boolean</span>
+<span class="sd">           If True, new snap is tested against existing snaps to see if</span>
+<span class="sd">           has consistent properties (simulation domain dimensions, number</span>
+<span class="sd">           of atoms, boundary conditions, unit type).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Active data set is not set - cannot proceed with adding snap.</span>
+        <span class="k">if</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span> <span class="ow">is</span> <span class="bp">None</span>
+                                        <span class="ow">or</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span> <span class="o">==</span> <span class="s">&#39;&#39;</span><span class="p">):</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Cannot add snapshot without dataset.&#39;</span><span class="p">)</span>
+            <span class="k">return</span>
+
+        <span class="k">try</span><span class="p">:</span>
+            <span class="n">snap_handle</span> <span class="o">=</span> <span class="n">Snap</span><span class="p">(</span><span class="n">new_name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">)</span>
+        <span class="c"># IOError thrown py pyTables on bad read.</span>
+        <span class="k">except</span> <span class="ne">IOError</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Skipping </span><span class="si">%s</span><span class="s">: Not HDF file, or does not exist.&#39;</span>
+                                                                <span class="o">%</span> <span class="n">new_name</span><span class="p">)</span>
+        <span class="c"># Adding any existing selections to new snap</span>
+        <span class="k">for</span> <span class="n">sel</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">selections</span><span class="p">:</span>
+            <span class="n">snap_handle</span><span class="o">.</span><span class="n">add_selection</span><span class="p">(</span><span class="n">sel</span><span class="p">)</span>
+
+        <span class="c"># Close snap file to avoid having too many open at one time.</span>
+        <span class="n">snap_handle</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">cleanup</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">snap_handle</span><span class="p">)</span>
+        <span class="c"># Incrementing the number of snaps.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">nsnaps</span> <span class="o">+=</span> <span class="mi">1</span>
+
+        <span class="c"># Testing if new snap changes constant meta data tests</span>
+        <span class="k">if</span> <span class="n">test_constant</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">constant_props_test</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="SimContainer.gather_data"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.gather_data">[docs]</a>    <span class="k">def</span> <span class="nf">gather_data</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">test_constant</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Gathers metadata based on data from first snapshot</span>
+<span class="sd">        (i.e. at ``SimContainer.slist[0]``)</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        test_constant : boolean</span>
+<span class="sd">            If True, new snap is tested against existing snaps to see if</span>
+<span class="sd">            has consistent properties (simulation domain dimensions, number</span>
+<span class="sd">            of atoms, boundary conditions, unit type)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Perform gather_data(...) on each of attached snaps.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slice_action_do</span><span class="p">(</span><span class="s">&#39;gather_data&#39;</span><span class="p">)</span>
+        
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">meta</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">sim_cell</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">sim_cell</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">col_mapping</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">col_mapping</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">vectors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">vectors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">tensors</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">symm_tensors</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">times</span> <span class="o">=</span> <span class="p">[</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;time&#39;</span><span class="p">]</span> <span class="k">for</span> <span class="n">snap</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">]</span>
+
+        <span class="c"># Testing if metadata is constant across attached snaps</span>
+        <span class="k">if</span> <span class="n">test_constant</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">constant_props_test</span><span class="p">()</span>
+
+    <span class="c"># ----------------- GETTING DATA FROM SNAPS ------------------------------</span>
+</div>
+<div class="viewcode-block" id="SimContainer.slice_action_do"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.slice_action_do">[docs]</a>    <span class="k">def</span> <span class="nf">slice_action_do</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Calls function named ``action`` on all attached snaps.</span>
+<span class="sd">        </span>
+<span class="sd">        The snap method ``action`` is called immediately.  This</span>
+<span class="sd">        function does not produce a generator.</span>
+
+<span class="sd">        .. note::</span>
+<span class="sd">           This function can only act on the snaps in :attr:`slist`.</span>
+<span class="sd">           Nothing is returned.</span>
+<span class="sd">        </span>
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        action : string</span>
+<span class="sd">            Name of :class:`~mdhandle.snap.Snap` function.</span>
+<span class="sd">        *args, *kwargs :</span>
+<span class="sd">            Arguments and keyword arguments to ``action`` function.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">snap</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">:</span>
+            <span class="n">snap</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+
+            <span class="c"># Special case - gather data is already called.</span>
+            <span class="k">if</span> <span class="n">action</span> <span class="o">==</span> <span class="s">&#39;gather_data&#39;</span><span class="p">:</span>
+                <span class="k">pass</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="n">func</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">snap</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">func</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
+                    <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Function </span><span class="si">%s</span><span class="s"> not available&#39;</span> <span class="o">%</span> <span class="n">action</span><span class="p">)</span>
+            <span class="n">snap</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">cleanup</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="SimContainer.slice_action_return"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.slice_action_return">[docs]</a>    <span class="k">def</span> <span class="nf">slice_action_return</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns generator containing snap method ``action``.</span>
+<span class="sd">        </span>
+<span class="sd">        To get the result of the snap method the generator must be used.</span>
+<span class="sd">        </span>
+<span class="sd">        This method is required in cases where the return value is required,</span>
+<span class="sd">        especially in cases where the returned value is large</span>
+<span class="sd">        (i.e. atomwise or gridded datad)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">snap</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">:</span>
+            <span class="n">snap</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+
+            <span class="n">func</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="n">snap</span><span class="p">,</span> <span class="n">action</span><span class="p">,</span> <span class="bp">None</span><span class="p">)</span>
+            <span class="k">if</span> <span class="n">func</span> <span class="ow">is</span> <span class="bp">None</span><span class="p">:</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Snap function </span><span class="si">%s</span><span class="s"> not available&#39;</span> <span class="o">%</span> <span class="n">action</span><span class="p">)</span>
+
+            <span class="k">yield</span> <span class="n">func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
+
+            <span class="c"># Closing if necessary to prevent accumulation of open files.</span>
+            <span class="k">if</span> <span class="n">snap</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">is_open</span><span class="p">()</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+                <span class="n">snap</span><span class="o">.</span><span class="n">writer</span><span class="o">.</span><span class="n">cleanup</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="SimContainer.slice_generator"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.slice_generator">[docs]</a>    <span class="k">def</span> <span class="nf">slice_generator</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Returns generator used for iterating over </span>
+<span class="sd">        :class:`~mdhandle.snap.Snap` functions.</span>
+<span class="sd">        </span>
+<span class="sd">        .. note::</span>
+<span class="sd">           Users must be careful to close the snap files as they are used</span>
+<span class="sd">           in cases where the number of snaps within :attr:`slist` is</span>
+<span class="sd">           larger than the maximum number of open files in Python.</span>
+<span class="sd">        </span>
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">for</span> <span class="n">snap</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">:</span>
+            <span class="n">snap</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
+            <span class="k">yield</span> <span class="n">snap</span>
+</div>
+<div class="viewcode-block" id="SimContainer.slice_metadata"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.slice_metadata">[docs]</a>    <span class="k">def</span> <span class="nf">slice_metadata</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get item of metadata from across entire :class:`SimContainer`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        prop_name : string</span>
+<span class="sd">            Name of :class:`~mdhandle.snap.Snap` metadata property to get.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">            Ordered list of metadata value for each snapshot.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span> 
+        <span class="k">return</span> <span class="p">[</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="n">prop_name</span><span class="p">]</span> <span class="k">for</span> <span class="n">snap</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">slist</span><span class="p">]</span>
+</div>
+<div class="viewcode-block" id="SimContainer.slice_heavy_scalar"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.slice_heavy_scalar">[docs]</a>    <span class="k">def</span> <span class="nf">slice_heavy_scalar</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">scalar_name</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get scalar collection (Nx1) from each attached </span>
+<span class="sd">        :class:`~mdhandle.snap.Snap`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        scalar_name : string</span>
+<span class="sd">            Name of scalar attribute.</span>
+<span class="sd">        raw_data : boolean, [default=False]</span>
+<span class="sd">            If ``True``, avoids the use of any existing selections.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        scalar_gen : generator</span>
+<span class="sd">            Generator for iterating through snap files.  Each call to the</span>
+<span class="sd">            generator returns a scalar collection.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">scalar_gen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_action_return</span><span class="p">(</span><span class="s">&#39;get_scalar&#39;</span><span class="p">,</span> 
+                                              <span class="n">scalar_name</span><span class="p">,</span> <span class="n">raw_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">scalar_gen</span>
+</div>
+<div class="viewcode-block" id="SimContainer.slice_heavy_vector"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.slice_heavy_vector">[docs]</a>    <span class="k">def</span> <span class="nf">slice_heavy_vector</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">comp_names</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get vector collection (Nx3 numpy.ndarray) from each attached </span>
+<span class="sd">        :class:`~mdhandle.snap.Snap`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        comp_names : iterate</span>
+<span class="sd">            Names of vector components for vector collection.</span>
+<span class="sd">        raw_data : boolean, [default=False]</span>
+<span class="sd">            If ``True``, avoids the use of any existing selections.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        vec_gen : generator</span>
+<span class="sd">            Generator for iterating through snap files.  Each call to the</span>
+<span class="sd">            generator returns a vector collection.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">vec_gen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_action_return</span><span class="p">(</span><span class="s">&#39;get_vector&#39;</span><span class="p">,</span> <span class="n">comp_names</span><span class="p">,</span> <span class="n">raw_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">vec_gen</span>
+</div>
+<div class="viewcode-block" id="SimContainer.slice_heavy_tensor"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.slice_heavy_tensor">[docs]</a>    <span class="k">def</span> <span class="nf">slice_heavy_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">comp_names</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get tensor collection (Nx9 :class:`numpy.ndarray`) from each </span>
+<span class="sd">        attached :class:`~mdhandle.snap.Snap`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        comp_names : iterable</span>
+<span class="sd">            Names of tensor components for tensor collection.</span>
+<span class="sd">        raw_data : boolean, [default=False]</span>
+<span class="sd">            If ``True``, avoids the use of any existing selections.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        tens_gen : generator</span>
+<span class="sd">            Generator for iterating through snap files.  Each call to the</span>
+<span class="sd">            generator returns a tensor collection.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">tens_gen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_action_return</span><span class="p">(</span><span class="s">&#39;get_tensor&#39;</span><span class="p">,</span> <span class="n">comp_names</span><span class="p">,</span> <span class="n">raw_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">tens_gen</span>
+</div>
+<div class="viewcode-block" id="SimContainer.slice_heavy_symm_tensor"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.slice_heavy_symm_tensor">[docs]</a>    <span class="k">def</span> <span class="nf">slice_heavy_symm_tensor</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">comp_names</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Get symmetic tensor collection (:class:`numpy.ndarray`, (Nx6)) </span>
+<span class="sd">        from each attached :class:`~mdhandle.snap.Snap`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        comp_names : iterable</span>
+<span class="sd">            Names of symmetric tensor components for symmetric</span>
+<span class="sd">            tensor collection.</span>
+<span class="sd">        raw_data : boolean, [default=False]</span>
+<span class="sd">            If ``True``, avoids the use of any existing selections.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        symm_gen : generator</span>
+<span class="sd">            Generator for iterating through snap files.  Each call to the</span>
+<span class="sd">            generator returns a symmetric tensor collection.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">symm_gen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_action_return</span><span class="p">(</span><span class="s">&#39;get_symm_tensor&#39;</span><span class="p">,</span> 
+                                            <span class="n">comp_names</span><span class="p">,</span> <span class="n">raw_data</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">symm_gen</span>
+
+    <span class="c"># -------------------------- SELECTIONS ----------------------------------</span>
+</div>
+<div class="viewcode-block" id="SimContainer.add_selection"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.add_selection">[docs]</a>    <span class="k">def</span> <span class="nf">add_selection</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">new_selection</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Adds a :class:`~mdhandle.properties.selection.Selection` object to</span>
+<span class="sd">        :class:`SimContainer` and contained :class:`~mdhandle.snap.Snap` </span>
+<span class="sd">        objects.</span>
+
+<span class="sd">        Selections are stored in a list at :attr:`SimContainer.selections` and</span>
+<span class="sd">        act to sequentially select sub-sets of atoms.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        new_selection : :class:`mdhandle.properties.selection.Selection`</span>
+<span class="sd">            Selection object object used to choose a sub-set of</span>
+<span class="sd">            atoms within the snapshot.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selections</span><span class="o">.</span><span class="n">append</span><span class="p">(</span><span class="n">new_selection</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slice_action_do</span><span class="p">(</span><span class="s">&#39;add_selection&#39;</span><span class="p">,</span> <span class="n">new_selection</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="SimContainer.reset_selections"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.reset_selections">[docs]</a>    <span class="k">def</span> <span class="nf">reset_selections</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Removes all existing selections stored in self.selections from</span>
+<span class="sd">        simContainer and contained :class:`mdhandle.snap.Snap` objects.</span>
+
+<span class="sd">        See Also</span>
+<span class="sd">        ----------</span>
+<span class="sd">        :meth:`SimContainer.add_selection` for more information.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">selections</span> <span class="o">=</span> <span class="p">[]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">slice_action_do</span><span class="p">(</span><span class="s">&#39;reset_selections&#39;</span><span class="p">)</span>
+
+    <span class="c"># ----------------- TESTING SNAP DATA ------------------------------------</span>
+</div>
+<div class="viewcode-block" id="SimContainer.constant_props_test"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.constant_props_test">[docs]</a>    <span class="k">def</span> <span class="nf">constant_props_test</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Runs collection of metadata tests.</span>
+
+<span class="sd">        The result of each test is stored in related </span>
+<span class="sd">        :class:`SimContainer` attribute.</span>
+
+<span class="sd">        **:class:`SimContainer`  items tested**:</span>
+<span class="sd">        </span>
+<span class="sd">        * Simulation cell dimensions.</span>
+<span class="sd">        * Number of atoms.</span>
+<span class="sd">        * Unit system.</span>
+<span class="sd">        * Attributes (scalars, vectors, tensors, symmetric tensors).</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">box_constant_test</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta_constant_test</span><span class="p">(</span><span class="s">&#39;col_mapping&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta_constant_test</span><span class="p">(</span><span class="s">&#39;num_atoms&#39;</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">meta_constant_test</span><span class="p">(</span><span class="s">&#39;units&#39;</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="SimContainer.box_constant_test"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.box_constant_test">[docs]</a>    <span class="k">def</span> <span class="nf">box_constant_test</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Tests if simulation box dimensions are constant for snaps within</span>
+<span class="sd">        the :class:`SimContainer` object.</span>
+
+<span class="sd">        **Assumptions**:</span>
+<span class="sd">        </span>
+<span class="sd">        * Cuboid simulation domain.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="n">num_fail</span> <span class="o">=</span> <span class="mi">0</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Running: box_constant_test&#39;</span><span class="p">)</span>
+
+        <span class="k">for</span> <span class="n">coord</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;x&#39;</span><span class="p">,</span> <span class="s">&#39;y&#39;</span><span class="p">,</span> <span class="s">&#39;z&#39;</span><span class="p">]:</span>
+            <span class="k">for</span> <span class="n">direc</span> <span class="ow">in</span> <span class="p">[</span><span class="s">&#39;lo&#39;</span><span class="p">,</span> <span class="s">&#39;hi&#39;</span><span class="p">]:</span>
+                <span class="n">test_value</span> <span class="o">=</span> <span class="bp">True</span>
+                <span class="n">test_value</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta_constant_test</span><span class="p">(</span><span class="n">coord</span><span class="o">+</span><span class="n">direc</span><span class="p">)</span>
+                <span class="k">if</span> <span class="n">test_value</span> <span class="ow">is</span> <span class="bp">False</span><span class="p">:</span>
+                    <span class="n">num_fail</span> <span class="o">+=</span> <span class="mi">1</span>
+        <span class="k">if</span> <span class="n">num_fail</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Result: False&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">is_constant</span><span class="p">[</span><span class="s">&#39;box&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">False</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Result: True&#39;</span><span class="p">)</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">is_constant</span><span class="p">[</span><span class="s">&#39;box&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">True</span>
+
+        <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">is_constant</span><span class="p">[</span><span class="s">&#39;box&#39;</span><span class="p">]</span>
+</div>
+<div class="viewcode-block" id="SimContainer.meta_constant_test"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.meta_constant_test">[docs]</a>    <span class="k">def</span> <span class="nf">meta_constant_test</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Test if a piece of metadata is constant across set of snapshots.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        prop_name : string</span>
+<span class="sd">            Name of metadata property for testing.</span>
+
+<span class="sd">        Returns</span>
+<span class="sd">        --------</span>
+<span class="sd">        test_value : boolean</span>
+<span class="sd">            Boolean flag for the value of the test.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Running: </span><span class="si">%s</span><span class="s"> constant test&#39;</span> <span class="o">%</span> <span class="n">prop_name</span><span class="p">)</span>
+
+        <span class="n">test_value</span> <span class="o">=</span> <span class="bp">True</span>
+        <span class="n">meta_list</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">slice_metadata</span><span class="p">(</span><span class="n">prop_name</span><span class="p">)</span>
+
+        <span class="k">if</span> <span class="nb">len</span><span class="p">(</span><span class="n">meta_list</span><span class="p">)</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;SimContainer does not contain any data.&#39;</span><span class="p">)</span>
+            <span class="n">test_value</span> <span class="o">=</span> <span class="bp">True</span>
+
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">meta_list</span><span class="p">)</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;SimContainer contains only single</span><span class="se">\</span>
+<span class="s">                                            snapshot.</span><span class="se">\n\t</span><span class="s">Metadata is constant&#39;</span><span class="p">)</span>
+            <span class="n">test_value</span> <span class="o">=</span> <span class="bp">True</span>
+
+        <span class="c"># More than one snap - iterate over gathered metadata</span>
+        <span class="k">elif</span> <span class="nb">len</span><span class="p">(</span><span class="n">meta_list</span><span class="p">)</span> <span class="o">&gt;</span> <span class="mi">1</span><span class="p">:</span>
+            <span class="n">first_item</span> <span class="o">=</span> <span class="n">meta_list</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+            <span class="k">for</span> <span class="n">item</span> <span class="ow">in</span> <span class="n">meta_list</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">item</span> <span class="o">!=</span> <span class="n">first_item</span><span class="p">:</span>
+                    <span class="n">test_value</span> <span class="o">=</span> <span class="bp">False</span>
+                    <span class="k">break</span>
+        <span class="c"># Only if len(meta_list) &lt; 0</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;simContainder metadata slice has </span><span class="se">\</span>
+<span class="s">                                                            negative length.&#39;</span><span class="p">)</span>
+
+        <span class="c"># Setting attribute and returning value</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Result: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">test_value</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">is_constant</span><span class="p">[</span><span class="n">prop_name</span><span class="p">]</span> <span class="o">=</span> <span class="n">test_value</span>
+        <span class="k">return</span> <span class="n">test_value</span>
+
+    <span class="c"># ----------------- MISC FUNCTIONS ----------------------------------------</span>
+</div>
+<div class="viewcode-block" id="SimContainer.get_log"><a class="viewcode-back" href="../../reference.html#mdhandle.simcontainer.SimContainer.get_log">[docs]</a>    <span class="k">def</span> <span class="nf">get_log</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">log_name</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Attach LAMMPS log file to :class:`SimContainer`.</span>
+
+<span class="sd">        Does not contain any logic to ensure that the log file is logically</span>
+<span class="sd">        related to the snaps within the SimContainer.</span>
+
+<span class="sd">        Uses :class:`mdhandle.readers.log.Log`.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        ----------</span>
+<span class="sd">        log_name : string</span>
+<span class="sd">            Absolute path to log file.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">LAMMPS_log</span> <span class="o">=</span> <span class="n">Log</span><span class="p">(</span><span class="n">log_name</span><span class="p">)</span>
+
+
+<span class="c"># ============================================================================</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

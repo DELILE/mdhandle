@@ -1,0 +1,290 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.readers.eam &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="up" title="mdhandle.readers" href="../readers.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../readers.html" accesskey="U">mdhandle.readers</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.readers.eam</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Parses and plots EAM potential files (i.e. ``Pt_u3.eam`` distributed </span>
+<span class="sd">with LAMMPS).</span>
+
+<span class="sd">Not suitable to alloy potential files.</span>
+
+<span class="sd">**Credits** :</span>
+
+<span class="sd">* MATLAB script by Arun K Subramaniyan</span>
+<span class="sd">* Pt EAM functions (universal 3): SM Foiles et al, Phys Rev B, 33, 7983 (1986)</span>
+
+<span class="sd">.. note::</span>
+<span class="sd">   EAM files in LAMMPS are calibrated to function in units metal</span>
+<span class="sd">   so distance is in angstroms, and energy is in eV.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="kn">import</span> <span class="nn">sys</span>
+
+<span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
+<span class="kn">import</span> <span class="nn">pylab</span> <span class="kn">as</span> <span class="nn">plt</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+
+<div class="viewcode-block" id="EAM"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.eam.EAM">[docs]</a><span class="k">class</span> <span class="nc">EAM</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Plots components of EAM potential.</span>
+
+<span class="sd">    Designed for format of ``Pt_u3.eam`` distributed with LAMMPS.</span>
+<span class="sd">    Not suitable for alloy EAM potential files.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    -----------</span>
+<span class="sd">    eam_fn : string</span>
+<span class="sd">        Name of EAM potential file.</span>
+<span class="sd">    verbose : boolean</span>
+<span class="sd">        If ``True``, verbose user I/O.</span>
+
+<span class="sd">    Attributes</span>
+<span class="sd">    -----------</span>
+<span class="sd">    eam_fn : string</span>
+<span class="sd">        EAM file name.</span>
+<span class="sd">    verbose : boolean</span>
+<span class="sd">        If ``True``, verbose user I/O.</span>
+<span class="sd">    credit : string</span>
+<span class="sd">        Credit for EAM potential data from EAM file.</span>
+<span class="sd">    atomic_num : int</span>
+<span class="sd">        Atomic number of material from EAM file.</span>
+<span class="sd">    lattice_constant : float</span>
+<span class="sd">        Lattice constant of material from EAM file.</span>
+<span class="sd">    crystal_structure : string</span>
+<span class="sd">        Crystal structure type from EAM file.</span>
+<span class="sd">    num_embedding : int</span>
+<span class="sd">        Number of entries for embedding function.</span>
+<span class="sd">    num_elec_dens : int</span>
+<span class="sd">        Number of entries for electron density function.</span>
+<span class="sd">    dr_elec_dens : float</span>
+<span class="sd">        Delta in radial distance between entries for electron density function.</span>
+<span class="sd">    dr_pair : float</span>
+<span class="sd">        Delta in radial distance between entries for pair energy function.</span>
+<span class="sd">    embedding : :class:`numpy.ndarray`</span>
+<span class="sd">        Embedding function values as a function of radial distance.</span>
+<span class="sd">    pair : :class:`numpy.ndarray`</span>
+<span class="sd">        Pair energy function as a function of radial distance.</span>
+<span class="sd">    density : :class:`numpy.ndarray`</span>
+<span class="sd">        Electron density as a function of radial distance.</span>
+<span class="sd">    _header_size : int</span>
+<span class="sd">        Number of lines in EAM file header.</span>
+<span class="sd">    _number_cols : int</span>
+<span class="sd">        Number of columns in EAM file.</span>
+<span class="sd">    _f : file</span>
+<span class="sd">        File handle for EAM file.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">eam_fn</span><span class="p">,</span> <span class="n">verbose</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
+        <span class="c"># File info</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_header_size</span> <span class="o">=</span> <span class="mi">3</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_number_cols</span> <span class="o">=</span> <span class="mi">5</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">eam_fn</span> <span class="o">=</span> <span class="n">eam_fn</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">verbose</span> <span class="o">=</span> <span class="n">verbose</span>
+
+        <span class="c"># Initializing attributes.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_f</span> <span class="o">=</span> <span class="bp">None</span>                         
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">atomic_num</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">atomic_mass</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">crystal_structure</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lattice_constant</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">credit</span> <span class="o">=</span> <span class="s">&#39;&#39;</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_pair_points</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_elec_dens</span> <span class="o">=</span> <span class="mf">0.</span>    
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">density</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span>  <span class="o">=</span> <span class="mf">0.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pair</span> <span class="o">=</span> <span class="mf">0.</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">dr_pair</span> <span class="o">=</span> <span class="mf">0.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dr_elec_dens</span> <span class="o">=</span> <span class="mf">0.</span>
+
+<div class="viewcode-block" id="EAM.read"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.eam.EAM.read">[docs]</a>    <span class="k">def</span> <span class="nf">read</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Read and store data from EAM file.</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Read header</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_f</span> <span class="o">=</span> <span class="nb">open</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eam_fn</span><span class="p">,</span> <span class="s">&#39;r&#39;</span><span class="p">)</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">credit</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_f</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span>
+
+        <span class="n">line2</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_f</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">atomic_num</span> <span class="o">=</span> <span class="n">line2</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">atomic_mass</span> <span class="o">=</span> <span class="n">line2</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lattice_constant</span> <span class="o">=</span> <span class="n">line2</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">crystal_structure</span> <span class="o">=</span> <span class="n">line2</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+
+        <span class="n">line3</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_f</span><span class="o">.</span><span class="n">readline</span><span class="p">()</span><span class="o">.</span><span class="n">split</span><span class="p">()</span>
+
+        <span class="c"># Number of embedding is equal to num_elec_dens</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_embedding</span> <span class="o">=</span> <span class="n">line3</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_elec_dens</span> <span class="o">=</span> <span class="n">line3</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dr_elec_dens</span> <span class="o">=</span> <span class="n">line3</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">num_pair_points</span> <span class="o">=</span> <span class="n">line3</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">dr_pair</span> <span class="o">=</span> <span class="n">line3</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="n">line3</span><span class="p">[</span><span class="mi">4</span><span class="p">]</span>
+
+        <span class="bp">self</span><span class="o">.</span><span class="n">_f</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
+
+        <span class="c"># Big block of data from file - broken up later</span>
+        <span class="n">data</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">loadtxt</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">eam_fn</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">,</span>
+                                       <span class="n">skiprows</span><span class="o">=</span><span class="bp">self</span><span class="o">.</span><span class="n">_header_size</span><span class="p">)</span>
+
+        <span class="c"># Embedding energy is first block (200 rows, 5 cols read left to right)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span> <span class="o">=</span> <span class="n">data</span><span class="p">[:</span><span class="bp">self</span><span class="o">.</span><span class="n">num_embedding</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">_number_cols</span><span class="p">,</span> <span class="p">:]</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+
+        <span class="c"># Pair energy is second block (200 rows, 5 cols read left to right)</span>
+        <span class="c"># TODO: simplify into separate statements.</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">pair</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">num_embedding</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">_number_cols</span><span class="p">:</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">num_embedding</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">_number_cols</span>
+                                <span class="o">+</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_pair_points</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">_number_cols</span><span class="p">,</span>
+                                                                     <span class="p">:]</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+
+        <span class="c"># Density is third block (200 rows, 5 cols read left to right)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">density</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="bp">self</span><span class="o">.</span><span class="n">num_embedding</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">_number_cols</span><span class="o">+</span>
+                            <span class="bp">self</span><span class="o">.</span><span class="n">num_pair_points</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">_number_cols</span><span class="p">:,</span> <span class="p">:]</span><span class="o">.</span><span class="n">ravel</span><span class="p">()</span>
+</div>
+<div class="viewcode-block" id="EAM.plot"><a class="viewcode-back" href="../../../reference.html#mdhandle.readers.eam.EAM.plot">[docs]</a>    <span class="k">def</span> <span class="nf">plot</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">        Plot EAM components (&#39;pair&#39;, &#39;density&#39;, &#39;embedding&#39;)</span>
+
+<span class="sd">        &quot;&quot;&quot;</span>
+        <span class="c"># Number of samples along radius</span>
+        <span class="n">radius_scaffold</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">arange</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">num_embedding</span><span class="p">)</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">&#39;pair&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">&#39;$r$&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">&#39;$\sqrt{r \cdot \phi}$&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">radius_scaffold</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">dr_pair</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">pair</span><span class="p">)</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">&#39;density&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">&#39;$r$&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">&#39;$</span><span class="se">\r</span><span class="s">ho$&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">radius_scaffold</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">dr_elec_dens</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">density</span><span class="p">)</span>
+
+        <span class="n">plt</span><span class="o">.</span><span class="n">figure</span><span class="p">()</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">title</span><span class="p">(</span><span class="s">&#39;embedding&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">xlabel</span><span class="p">(</span><span class="s">&#39;$r$&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">ylabel</span><span class="p">(</span><span class="s">&#39;$F$&#39;</span><span class="p">)</span>
+        <span class="n">plt</span><span class="o">.</span><span class="n">plot</span><span class="p">(</span><span class="n">radius_scaffold</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">dr_pair</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">embedding</span><span class="p">)</span>
+
+
+<span class="c"># =============================================================================</span>
+
+</div></div>
+<span class="k">def</span> <span class="nf">main</span><span class="p">(</span><span class="n">argv</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+    <span class="k">pass</span>
+
+
+<span class="k">if</span> <span class="n">__name__</span> <span class="o">==</span> <span class="s">&quot;__main__&quot;</span><span class="p">:</span>
+    <span class="n">sys</span><span class="o">.</span><span class="n">exit</span><span class="p">(</span><span class="n">main</span><span class="p">())</span>
+</pre></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../../index.html" >Module code</a> &raquo;</li>
+          <li><a href="../readers.html" >mdhandle.readers</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>

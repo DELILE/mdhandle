@@ -1,0 +1,367 @@
+
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
+  "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+
+<html xmlns="http://www.w3.org/1999/xhtml">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
+    
+    <title>mdhandle.lammps &mdash; mdhandle v0.9a documentation</title>
+    <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
+    <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    <script type="text/javascript">
+      var DOCUMENTATION_OPTIONS = {
+        URL_ROOT:    '../../',
+        VERSION:     '0.9a',
+        COLLAPSE_INDEX: false,
+        FILE_SUFFIX: '.html',
+        HAS_SOURCE:  true
+      };
+    </script>
+    <script type="text/javascript" src="../../_static/jquery.js"></script>
+    <script type="text/javascript" src="../../_static/underscore.js"></script>
+    <script type="text/javascript" src="../../_static/doctools.js"></script>
+    <link rel="top" title="mdhandle v0.9a documentation" href="../../index.html" />
+    <link rel="up" title="Module code" href="../index.html" /> 
+  </head>
+  <body>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             accesskey="I">index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
+      </ul>
+    </div>  
+
+    <div class="document">
+      <div class="documentwrapper">
+        <div class="bodywrapper">
+          <div class="body">
+            
+  <h1>Source code for mdhandle.lammps</h1><div class="highlight"><pre>
+<span class="c"># mdhandle,  http://github.com/dtlussier/mdhandle</span>
+<span class="c"># Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group</span>
+<span class="c"># Released under the GNU General Public License, v2</span>
+<span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">Wrapper to compiled serial LAMMPS library.  </span>
+
+<span class="sd">Changes made to the LAMMPS SVN v25Sep11 to allow Python access via the LAMMPS library build to enable access to other types of atom-wise output in ordered way as is originally possible with coordinates only.</span>
+
+<span class="sd">Methods other than *new* :meth:`~mdhandle.lammps.lammps.put_coords` and</span>
+<span class="sd">:meth:`~mdhandle.lammps.lammps.lazy_extract_compute` remain unchanged.</span>
+
+<span class="sd">See LAMMPS distribution for documentation for further information.</span>
+
+<span class="sd">* http://lammps.sandia.gov/doc/Section_python.html</span>
+
+
+<span class="sd">**Credits**:</span>
+
+<span class="sd">* ``lammps.py`` file from LAMMPS v25Sep11 is largely unchanged. Modified to allow for ordered output of atomwise quantities.</span>
+<span class="sd">* See changes and patch file within LAMMPS source for modifications.</span>
+
+<span class="sd">&quot;&quot;&quot;</span>
+
+<span class="c"># -----------------------------------------------------------------------------</span>
+
+<span class="c"># ----------------------------------------------------------------------</span>
+<span class="c">#   LAMMPS - Large-scale Atomic/Molecular Massively Parallel Simulator</span>
+<span class="c">#   http://lammps.sandia.gov, Sandia National Laboratories</span>
+<span class="c">#   Steve Plimpton, sjplimp@sandia.gov</span>
+<span class="c">#</span>
+<span class="c">#   Copyright (2003) Sandia Corporation.  Under the terms of Contract</span>
+<span class="c">#   DE-AC04-94AL85000 with Sandia Corporation, the U.S. Government retains</span>
+<span class="c">#   certain rights in this software.  This software is distributed under </span>
+<span class="c">#   the GNU General Public License.</span>
+<span class="c">#</span>
+<span class="c">#   See the README file in the top-level LAMMPS directory.</span>
+<span class="c"># -------------------------------------------------------------------------</span>
+
+<span class="kn">import</span> <span class="nn">os</span>
+<span class="kn">from</span> <span class="nn">ctypes</span> <span class="kn">import</span> <span class="o">*</span>
+
+<span class="kn">import</span> <span class="nn">mdhandle</span>
+
+<span class="n">LMPINT</span> <span class="o">=</span> <span class="mi">0</span>
+<span class="n">LMPDOUBLE</span> <span class="o">=</span> <span class="mi">1</span>
+<span class="n">LMPIPTR</span> <span class="o">=</span> <span class="mi">2</span>
+<span class="n">LMPDPTR</span> <span class="o">=</span> <span class="mi">3</span>
+<span class="n">LMPDPTRPTR</span> <span class="o">=</span> <span class="mi">4</span>
+
+<div class="viewcode-block" id="lammps"><a class="viewcode-back" href="../../reference.html#mdhandle.lammps.lammps">[docs]</a><span class="k">class</span> <span class="nc">lammps</span><span class="p">:</span>
+  <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">args</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+
+    <span class="c"># Need to account for location of compiled LAMMPS library</span>
+    <span class="c"># at the root of the mdhandle egg when installed.</span>
+    <span class="c"># _lammps_serial.so is located in site-packages folder due to HACK </span>
+    <span class="c"># build below.</span>
+    <span class="n">location</span> <span class="o">=</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span>
+                    <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span>
+                            <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">dirname</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">abspath</span><span class="p">(</span><span class="n">__file__</span><span class="p">))))</span>
+
+    <span class="c"># attempt to load parallel library first, serial library next</span>
+    <span class="c"># could provide caller a flag to choose which library to load</span>
+    <span class="c">#</span>
+    <span class="c"># See: http://docs.python.org/library/ctypes.html#loading-shared-libraries</span>
+    <span class="c">#</span>
+    <span class="k">try</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span> <span class="o">=</span> <span class="n">CDLL</span><span class="p">(</span><span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="s">&quot;_lammps.so&quot;</span><span class="p">))</span>
+    <span class="k">except</span><span class="p">:</span>
+      <span class="k">try</span><span class="p">:</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">lib</span> <span class="o">=</span> <span class="n">CDLL</span><span class="p">(</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">location</span><span class="p">,</span> <span class="s">&quot;_lammps_serial.so&quot;</span><span class="p">))</span>
+      <span class="k">except</span><span class="p">:</span>
+        <span class="k">raise</span> <span class="ne">StandardError</span><span class="p">,</span><span class="s">&quot;Could not load LAMMPS dynamic library&quot;</span>
+
+    <span class="c"># create an instance of LAMMPS</span>
+    <span class="c"># don&#39;t know how to pass an MPI communicator from PyPar</span>
+    <span class="c"># no_mpi call lets LAMMPS use MPI_COMM_WORLD</span>
+    <span class="c"># cargs = array of C strings from args</span>
+    
+    <span class="k">if</span> <span class="n">args</span><span class="p">:</span>
+      <span class="n">args</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="s">&quot;lammps.py&quot;</span><span class="p">)</span>
+      <span class="n">narg</span> <span class="o">=</span> <span class="nb">len</span><span class="p">(</span><span class="n">args</span><span class="p">)</span>
+      <span class="n">cargs</span> <span class="o">=</span> <span class="p">(</span><span class="n">c_char_p</span><span class="o">*</span><span class="n">narg</span><span class="p">)(</span><span class="o">*</span><span class="n">args</span><span class="p">)</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lmp</span> <span class="o">=</span> <span class="n">c_void_p</span><span class="p">()</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_open_no_mpi</span><span class="p">(</span><span class="n">narg</span><span class="p">,</span><span class="n">cargs</span><span class="p">,</span><span class="n">byref</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">))</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lmp</span> <span class="o">=</span> <span class="n">c_void_p</span><span class="p">()</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_open_no_mpi</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span><span class="bp">None</span><span class="p">,</span><span class="n">byref</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">))</span>
+      <span class="c"># could use just this if LAMMPS lib interface supported it</span>
+      <span class="c"># self.lmp = self.lib.lammps_open_no_mpi(0,None)</span>
+
+  <span class="k">def</span> <span class="nf">__del__</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">:</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_close</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">)</span>
+
+  <span class="k">def</span> <span class="nf">close</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_close</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">)</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lmp</span> <span class="o">=</span> <span class="bp">None</span>
+
+  <span class="k">def</span> <span class="nf">file</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="nb">file</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_file</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="nb">file</span><span class="p">)</span>
+
+  <span class="k">def</span> <span class="nf">command</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">cmd</span><span class="p">):</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_command</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="n">cmd</span><span class="p">)</span>
+
+  <span class="k">def</span> <span class="nf">extract_global</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">name</span><span class="p">,</span><span class="nb">type</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="n">LMPDOUBLE</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_global</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">)</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_global</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="n">name</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">ptr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="n">LMPINT</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_global</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_int</span><span class="p">)</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_global</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="n">name</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">ptr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">return</span> <span class="bp">None</span>
+
+  <span class="k">def</span> <span class="nf">extract_atom</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">name</span><span class="p">,</span><span class="nb">type</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="n">LMPDPTRPTR</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_atom</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">))</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_atom</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="n">name</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">ptr</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="n">LMPDPTR</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_atom</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">)</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_atom</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="n">name</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">ptr</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="n">LMPIPTR</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_atom</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_int</span><span class="p">)</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_atom</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="n">name</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">ptr</span>
+    <span class="k">return</span> <span class="bp">None</span>
+
+  <span class="k">def</span> <span class="nf">extract_compute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+      <span class="k">if</span> <span class="n">style</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span> <span class="k">return</span> <span class="bp">None</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_compute</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">)</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_compute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">ptr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+    <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_compute</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">)</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_compute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">ptr</span>
+    <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_compute</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">))</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_compute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">ptr</span>
+    <span class="k">return</span> <span class="bp">None</span>
+
+  <span class="c"># in case of global datum, free memory for 1 double via lammps_free()</span>
+  <span class="c"># double was allocated by library interface function</span>
+  
+  <span class="k">def</span> <span class="nf">extract_fix</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">,</span><span class="n">i</span><span class="o">=</span><span class="mi">0</span><span class="p">,</span><span class="n">j</span><span class="o">=</span><span class="mi">0</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+      <span class="k">if</span> <span class="n">style</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">:</span> <span class="k">return</span> <span class="bp">None</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_fix</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">)</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_bix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">,</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">)</span>
+      <span class="n">result</span> <span class="o">=</span> <span class="n">ptr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_free</span><span class="p">(</span><span class="n">ptr</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">result</span>
+    <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_fix</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">)</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_fix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">,</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">ptr</span>
+    <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_fix</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">))</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_fix</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">,</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">ptr</span>
+    <span class="k">return</span> <span class="bp">None</span>
+
+  <span class="c"># free memory for 1 double or 1 vector of doubles via lammps_free()</span>
+  <span class="c"># for vector, must copy nlocal returned values to local c_double vector</span>
+  <span class="c"># memory was allocated by library interface function</span>
+  
+  <span class="k">def</span> <span class="nf">extract_variable</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span><span class="n">name</span><span class="p">,</span><span class="n">group</span><span class="p">,</span><span class="nb">type</span><span class="p">):</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_variable</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">)</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_variable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="n">name</span><span class="p">,</span><span class="n">group</span><span class="p">)</span>
+      <span class="n">result</span> <span class="o">=</span> <span class="n">ptr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_free</span><span class="p">(</span><span class="n">ptr</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">result</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_global</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_int</span><span class="p">)</span>
+      <span class="n">nlocalptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_global</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="s">&quot;nlocal&quot;</span><span class="p">)</span>
+      <span class="n">nlocal</span> <span class="o">=</span> <span class="n">nlocalptr</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span>
+      <span class="n">result</span> <span class="o">=</span> <span class="p">(</span><span class="n">c_double</span><span class="o">*</span><span class="n">nlocal</span><span class="p">)()</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_variable</span><span class="o">.</span><span class="n">restype</span> <span class="o">=</span> <span class="n">POINTER</span><span class="p">(</span><span class="n">c_double</span><span class="p">)</span>
+      <span class="n">ptr</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_extract_variable</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="n">name</span><span class="p">,</span><span class="n">group</span><span class="p">)</span>
+      <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">xrange</span><span class="p">(</span><span class="n">nlocal</span><span class="p">):</span> <span class="n">result</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">ptr</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_free</span><span class="p">(</span><span class="n">ptr</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">result</span>
+    <span class="k">return</span> <span class="bp">None</span>
+
+  <span class="k">def</span> <span class="nf">get_natoms</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_get_natoms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">)</span>
+
+  <span class="k">def</span> <span class="nf">get_coords</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+    <span class="n">nlen</span> <span class="o">=</span> <span class="mi">3</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_get_natoms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">)</span>
+    <span class="n">coords</span> <span class="o">=</span> <span class="p">(</span><span class="n">c_double</span><span class="o">*</span><span class="n">nlen</span><span class="p">)()</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_get_coords</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span><span class="n">coords</span><span class="p">)</span>
+    <span class="k">return</span> <span class="n">coords</span>
+
+  
+<div class="viewcode-block" id="lammps.put_coords"><a class="viewcode-back" href="../../reference.html#mdhandle.lammps.lammps.put_coords">[docs]</a>  <span class="k">def</span> <span class="nf">put_coords</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">coords</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Modifies atom coordinates in memory of running LAMMPS instance.</span>
+
+<span class="sd">    Assume coords is an array of c_double, as created by get_coords().</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    coords :  :class:`ctypes.c_couble`</span>
+<span class="sd">        :class:`ctypes` array of atom coordinates.</span>
+<span class="sd">        Array is length ``nlen``, the number of atoms in the LAMMPS simulation.</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_put_coords</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span> <span class="n">coords</span><span class="p">)</span>
+</div>
+<div class="viewcode-block" id="lammps.lazy_extract_compute"><a class="viewcode-back" href="../../reference.html#mdhandle.lammps.lammps.lazy_extract_compute">[docs]</a>  <span class="k">def</span> <span class="nf">lazy_extract_compute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span> <span class="nb">type</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Modification for mdhandle.</span>
+<span class="sd">    </span>
+<span class="sd">    Alternative to extract_compute(...) method which returns</span>
+<span class="sd">    a copy of array rather than pointer.</span>
+<span class="sd">    </span>
+<span class="sd">    This was previously only possible for coordinates via get_coords(...) </span>
+<span class="sd">    method.</span>
+
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    id : string</span>
+<span class="sd">        LAMMPS name for variable to extract.</span>
+<span class="sd">    type : int</span>
+<span class="sd">        Defines the shape of the variable.</span>
+<span class="sd">        { 0 -&gt; &#39;scalar&#39; |  1 -&gt; &#39;vector&#39; | 2 -&gt; &#39;tensor&#39; |  4 -&gt; &#39;symm tensor&#39;}</span>
+
+<span class="sd">    &quot;&quot;&quot;</span>
+
+    <span class="c"># See library.cpp for info.  Other styles are not implemented as they</span>
+    <span class="c"># were in extract_compute(...)</span>
+    <span class="n">style</span> <span class="o">=</span> <span class="mi">1</span>
+    
+    <span class="c"># Scalars: IN LAMMPS, per-atom vector is equivalent to scalar in mdhandle.</span>
+    <span class="k">if</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">0</span><span class="p">:</span>
+      <span class="n">nlen</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_get_natoms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">)</span>
+      <span class="n">vec</span> <span class="o">=</span> <span class="p">(</span><span class="n">c_double</span><span class="o">*</span><span class="n">nlen</span><span class="p">)()</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_lazy_extract_compute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span> <span class="n">vec</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">vec</span>
+
+    <span class="c"># For non-scalars, LAMMPS uses `array` rather than `vec`</span>
+
+    <span class="c"># vectors</span>
+    <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">1</span><span class="p">:</span>
+      <span class="n">nlen</span> <span class="o">=</span> <span class="mi">9</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_get_natoms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">)</span>
+      <span class="n">array</span> <span class="o">=</span> <span class="p">(</span><span class="n">c_double</span><span class="o">*</span><span class="n">nlen</span><span class="p">)()</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_lazy_extract_compute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span> <span class="n">array</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">array</span>
+
+    <span class="c"># tensors</span>
+    <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">2</span><span class="p">:</span>
+      <span class="n">nlen</span> <span class="o">=</span> <span class="mi">9</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_get_natoms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">)</span>
+      <span class="n">array</span> <span class="o">=</span> <span class="p">(</span><span class="n">c_double</span><span class="o">*</span><span class="n">nlen</span><span class="p">)()</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_lazy_extract_compute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span> <span class="n">array</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">array</span>
+
+    <span class="c"># symm tensors</span>
+    <span class="k">elif</span> <span class="nb">type</span> <span class="o">==</span> <span class="mi">3</span><span class="p">:</span>
+      <span class="n">nlen</span> <span class="o">=</span> <span class="mi">6</span> <span class="o">*</span> <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_get_natoms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">)</span>
+      <span class="n">array</span> <span class="o">=</span> <span class="p">(</span><span class="n">c_double</span><span class="o">*</span><span class="n">nlen</span><span class="p">)()</span>
+      <span class="bp">self</span><span class="o">.</span><span class="n">lib</span><span class="o">.</span><span class="n">lammps_lazy_extract_compute</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">lmp</span><span class="p">,</span> <span class="n">array</span><span class="p">,</span> <span class="nb">id</span><span class="p">,</span><span class="n">style</span><span class="p">,</span><span class="nb">type</span><span class="p">)</span>
+      <span class="k">return</span> <span class="n">array</span>
+
+    <span class="c"># None of conditions are satisfied - returning None</span>
+    <span class="k">else</span><span class="p">:</span>
+      <span class="k">return</span> <span class="bp">None</span>
+</pre></div></div></div>
+
+          </div>
+        </div>
+      </div>
+      <div class="sphinxsidebar">
+        <div class="sphinxsidebarwrapper">
+<div id="searchbox" style="display: none">
+  <h3>Quick search</h3>
+    <form class="search" action="../../search.html" method="get">
+      <input type="text" name="q" size="18" />
+      <input type="submit" value="Go" />
+      <input type="hidden" name="check_keywords" value="yes" />
+      <input type="hidden" name="area" value="default" />
+    </form>
+    <p class="searchtip" style="font-size: 90%">
+    Enter search terms or a module, class or function name.
+    </p>
+</div>
+<script type="text/javascript">$('#searchbox').show(0);</script>
+        </div>
+      </div>
+      <div class="clearer"></div>
+    </div>
+    <div class="related">
+      <h3>Navigation</h3>
+      <ul>
+        <li class="right" style="margin-right: 10px">
+          <a href="../../genindex.html" title="General Index"
+             >index</a></li>
+        <li class="right" >
+          <a href="../../py-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li class="right" >
+          <a href="../../np-modindex.html" title="Python Module Index"
+             >modules</a> |</li>
+        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+          <li><a href="../index.html" >Module code</a> &raquo;</li> 
+      </ul>
+    </div>
+    <div class="footer">
+        &copy; Copyright 2011, Dan Lussier, University of Oxford.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+    </div>
+  </body>
+</html>
