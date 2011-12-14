@@ -288,25 +288,19 @@ class XDMFWriter(object):
             self.logger.completion_msg('Wrote metadata to %s' % 
                                                 self.xmf_snap_name())
 
-    def xmf_grid_init(self, grid_name, timestep):
+    def xmf_grid_init(self):
         """
         Writes initial generic XML for both atom and gridded data
         to ``.xmf`` file.
 
-        Parameters
-        -----------
-        grid_name : string
-            Name for gridded dataset.
-            Usually snap dataset name.
-        timestep : int
-            Timestep for gridded dataset (e.g. 101000).
-
         """
-
+        grid_name = '%s-%s-%s' % (self.snap.meta['sim_name'],
+                                  self.snap.meta['grid_type'],
+                                  self.snap.active_dataset_name)
         XML = """
             <Grid Time="XXX_TIME_XXX" Name="XXX_NAME_XXX" GridType="Uniform">
                 <Time Value="XXX_TIME_XXX" />"""
-        XML = XML.replace("XXX_TIME_XXX", str(timestep))
+        XML = XML.replace("XXX_TIME_XXX", str(self.snap.meta['time']))
         XML = XML.replace("XXX_NAME_XXX", str(grid_name))
         self._xmf.write(XML)
 
@@ -740,8 +734,7 @@ class XDMFWriter(object):
         """
 
         self.xmf_new()
-        self.xmf_grid_init(self.snap.active_dataset_name,
-                                                        self.snap.meta['time'])
+        self.xmf_grid_init()
 
         if self.snap.meta['grid_type'] == 'atoms':
             self.xmf_grid_atoms(self.snap.meta['num_atoms'])
