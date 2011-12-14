@@ -2,8 +2,7 @@
    Copyright (c) 2008, Dan Lussier @ Oxford University, FBG Group
    Released under the GNU General Public License, v2
 
-
-:mod:`mdhandle` - README - v0.9
+``mdhandle`` - README - v0.9
 ================================
 
 Introduction
@@ -22,15 +21,15 @@ System Requirements
 
 1. **Linux**:  
 
-* Requires ``Python 2.6`` or higher in the ``2.x`` series. Not compatible with ``Python 3.x`` due to dependancy with :mod:`NumPy`.
+* Requires ``Python 2.6`` or higher in the ``2.x`` series. Not compatible with ``Python 3.x`` due to dependancy with ``NumPy``.
 
 * ``Python`` package dependencies:
-	* :mod:`NumPy`
-	* :mod:`SciPy`
-	* :mod:`matplotlib`
-	* :mod:`PyTables`
-	* :mod:`IPython`
-	* :mod:`sphinx` and :mod:`numpydoc` for documentation.
+	* ``NumPy``
+	* ``SciPy``
+	* ``matplotlib``
+	* ``PyTables``
+	* ``IPython``
+	* ``sphinx`` and ``numpydoc`` for documentation.
 	* Python dependancies are downloaded automatically during install
 	  by ``easy_install`` or ``pip``.
         
@@ -107,10 +106,10 @@ Acknowledgements
 
 **Related Packages**:
 
-* :mod:`MMTK`, http://dirac.cnrs-orleans.fr/MMTK/ 
-* :mod:`MD-Tracks`, http://molmod.ugent.be/code/wiki/MD-Tracks
-* :mod:`mdanalysis`, http://code.google.com/p/mdanalysis/
-* :mod:`Pizza`, http://www.sandia.gov/~sjplimp/pizza.html
+* ``MMTK``, http://dirac.cnrs-orleans.fr/MMTK/ 
+* ``MD-Tracks``, http://molmod.ugent.be/code/wiki/MD-Tracks
+* ``mdanalysis``, http://code.google.com/p/mdanalysis/
+* ``Pizza``, http://www.sandia.gov/~sjplimp/pizza.html
 
 **Thanks**:
 
