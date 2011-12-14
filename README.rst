@@ -93,7 +93,7 @@ local level.  :mod:`mdhandle` must be in your ``PYTHONPATH`` to build docs using
 
 A persistent version of the documentation reflecting the 
 github version is at http://dtlussier.github.com/mdhandle/ and
-on mirrored at mdhandle.readthedocs.org
+on mirrored at http://mdhandle.readthedocs.org
 
 Authors
 ---------
