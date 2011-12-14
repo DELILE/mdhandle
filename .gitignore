@@ -1,0 +1,43 @@
+# Other version control
+.hg
+.bzr
+.svn
+
+#python specific
+*.py[co]
+
+# Development
+PYSMELLTAGS*
+
+# Distribution and Packaging
+*.egg
+*.egg-info
+dist
+build
+eggs
+parts
+var
+sdist
+develop-eggs
+.installed.cfg
+
+# Installer logs
+pip-log.txt
+
+# Unit test / coverage reports
+.coverage
+.tox
+mock-*.egg
+nose-*.egg
+
+#Translations
+*.mo
+
+#Mr Developer
+.mr.developer.cfg
+
+# Sphinx
+docs/_build/
+
+#mdhandle specific
+

@@ -1,0 +1,97 @@
+# LAMMPS input file used to produce output contained within lj_block folder.
+# NOTE: A new simulation run will not produce identical output due to
+#       randomness present in initial seeding of velocity, and accumulated
+#       rounding error.  Comparisons with existing data should be done
+#       carefully, and more typically on aggregate properties rather than
+#       detailed atomwise data.
+
+# Setting log file
+log log.log
+
+############## Variables #############################
+
+variable liq_dens equal 0.8389
+
+variable liq_x equal 25
+variable liq_z equal 25
+variable liq_y equal 25
+
+variable r_cutoff equal 4.0
+variable mass equal 1.0
+variable t_init equal 1.0
+variable t_final equal 0.709515
+
+#### must be integers ####
+variable thermo_freq equal 1000
+variable dump_freq_equil equal   10000
+
+variable time_step equal 0.005
+variable equil_ts equal 500000
+variable run_ts equal ${equil_ts}+250000
+
+variable sim_box_x equal ${liq_x}
+variable sim_box_y equal ${liq_y}
+variable sim_box_z equal ${liq_z}
+
+
+############### simulation settings ######################
+
+units lj
+dimension 3
+boundary p p p
+atom_style atomic
+
+################# geometry #################
+
+neighbor 1.0 bin
+neigh_modify delay 5 every 1
+
+lattice fcc ${liq_dens}
+
+region sim_box block 	0 ${sim_box_x} 0 ${sim_box_y} 0 ${sim_box_z} units box
+region liq_init block 	0 ${liq_x} 0 ${liq_y} 0 ${liq_z} units box
+
+################ initializing atoms ####################
+
+create_box 1 sim_box
+
+create_atoms 1 region liq_init
+
+mass 1 ${mass}
+
+# LJ potentials
+pair_style lj/cut ${r_cutoff}
+pair_coeff * * 1.0 1.0 ${r_cutoff}
+
+########### computes and fixes ##################################
+
+compute coord all coord/atom ${r_cutoff}
+compute ke all ke/atom 
+compute epair all pe/atom
+compute stress all stress/atom
+
+velocity all create ${t_init} 482778 dist gaussian
+
+fix 1 all nve
+fix 2 all temp/rescale 100 ${t_init} ${t_final} 0.01 1.0
+
+compute rdf all rdf 100
+fix 3 all ave/time 100 1 100 c_rdf file rdf.dat mode vector 
+
+
+###################### Running ################################
+
+timestep ${time_step}
+thermo_style custom step temp press pe ke etotal enthalpy epair vol pxx pyy pzz pxy pxz pyz xlo xhi ylo yhi zlo zhi
+thermo ${thermo_freq}
+
+dump mydump all custom ${dump_freq_equil} dump_*.out id type mass x y z ix iy iz xs ys zs xu yu zu vx vy vz fx fy fz c_coord c_ke c_epair c_stress[1] c_stress[2] c_stress[3] c_stress[4] c_stress[5] c_stress[6]
+
+run ${equil_ts} upto
+
+unfix 2
+
+# Running without temperature fixed
+run 100000
+
+run ${run_ts} upto

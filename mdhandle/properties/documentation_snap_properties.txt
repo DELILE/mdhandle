@@ -1,0 +1,32 @@
+documentation_snap_properties --> SnapProperties class
+
+Methods
+--------
+set_volume(volume)
+    Set the volume occupied by the snapshot atoms.
+get_volume_density(prop_name)
+    Get volume density for general snap property.
+get_mass_norm(prop_name)
+    Get general snap property normalized by mass.
+epair_total(epair_name='epair')
+    Calculate total potential energy in snap.
+count_total()
+    Calculate total number of atoms in snap.
+ke_total(ke_name='ke')
+    Calculate total kinetic energy in snap from atomwise velocity.
+mass_total(mass_name='mass')
+    Calculate total mass in snap.
+force_total(force_name='force')
+    Calculate total force on snap atoms.
+other_total(prop_name)
+    Calculate total of general property on snap atoms.
+com_pos_vel()
+    Calculate snap centre of pass position and velocity.
+temp_total(correct=True)
+    Calculate snap temperature.
+
+    If ``correct is True``, correct for streaming velocity.
+stress_total(stress_name='stress')
+    Calculate total stress tensor on snap.
+pressure_total()
+    Calculate scalar pressure on snap atoms.

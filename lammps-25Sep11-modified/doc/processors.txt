@@ -1,0 +1,63 @@
+"LAMMPS WWW Site"_lws - "LAMMPS Documentation"_ld - "LAMMPS Commands"_lc :c
+
+:link(lws,http://lammps.sandia.gov)
+:link(ld,Manual.html)
+:link(lc,Section_commands.html#comm)
+
+:line
+
+processors command :h3
+
+[Syntax:]
+
+processors Px Py Pz :pre
+
+Px,Py,Pz = # of processors in each dimension of a 3d grid :ul
+
+[Examples:]
+
+processors 2 4 4
+processors * * 5
+processors * 1 10 :pre
+
+[Description:]
+
+Specify how processors are mapped as a 3d logical grid to the global
+simulation box, namely Px by Py by Pz.
+
+Any of the Px, Py, Pz parameters can be specified with an asterisk
+"*", which means LAMMPS will choose the number of processors in that
+dimension.  It will do this based on the size and shape of the global
+simulation box so as to minimize the surface-to-volume ratio of each
+processor's sub-domain.
+
+Since LAMMPS does not load-balance by changing the grid of 3d
+processors on-the-fly, this command can be used to override the LAMMPS
+default if it is known to be sub-optimal for a particular problem.
+For example, a problem where the atom's extent will change
+dramatically in a particular dimension over the course of the
+simulation.
+
+The product of Px, Py, Pz must equal P, the total # of processors
+LAMMPS is running on.  For a "2d simulation"_dimension.html, Pz must
+equal 1.  If multiple partitions are being used then P is the number
+of processors in this partition; see "this
+section"_Section_start.html#start_6 for an explanation of the
+-partition command-line switch.
+
+Note that if you run on a large, prime number of processors P, then a
+grid such as 1 x P x 1 will be required, which may incur extra
+communication costs.
+
+[Restrictions:]
+
+This command cannot be used after the simulation box is defined by a
+"read_data"_read_data.html or "create_box"_create_box.html command.
+It can be used before a restart file is read to change the 3d
+processor grid from what is specified in the restart file.
+
+[Related commands:] none
+
+[Default:]
+
+Px Py Pz = * * *
