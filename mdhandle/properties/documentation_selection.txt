@@ -1,6 +1,0 @@
-selection.Selection
-
-Methods
---------
-calculate_mask(snap) 
-    Calculate selection mask based on :meth:`Selection.masking_function`.

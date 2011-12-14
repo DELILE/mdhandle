@@ -40,4 +40,4 @@ nose-*.egg
 docs/_build/
 
 #mdhandle specific
-
+mdhandle/properties/*.txt

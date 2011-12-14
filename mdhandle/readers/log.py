@@ -9,7 +9,8 @@ Provides wrapper to ``log.py`` in Pizza post-processing package.
 **Credits** :
 
 * Uses ``log.py`` from Pizza v19Apr10 for reading LAMMPS log files
-  (http://www.sandia.gov/~sjplimp/pizza.html).
+  (http://www.sandia.gov/~sjplimp/pizza.html).  Within :mod:`mdhandle`
+  it is renamed ``log_pizza.py``.
 
 """
 # TODO: Embed the log data within one or all of HDF files.
