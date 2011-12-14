@@ -11,7 +11,7 @@ steps:
 2. Calculate the distances (or other usefull things) between coordinates
    in neighbouring bins.
 
-**Credits**: Inspiration for binning algorithm from binning module from ``mol_mod`` module in ``MD-Tracks`` package
+**Credits**: Inspiration for binning algorithm from binning module in ``mol_mod`` module in ``MD-Tracks`` package
 
 """
 #TODO: Handle case where atoms are outside the primary simulation cell.

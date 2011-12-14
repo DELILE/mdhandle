@@ -1,7 +1,7 @@
 recursive-include doc *
+prune doc/_build/
 recursive-include lammps-25Sep11-modified *
 prune lammps-25Sep11-modified/python/build/
-prune doc/_build/doctrees/
-exclude doc/_build/html/.buildinfo
+prune lammps-25Sep11-modified/python/dist
 include *.txt
 include *.rst

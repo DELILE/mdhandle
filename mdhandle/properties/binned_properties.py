@@ -5,6 +5,9 @@
 Calculate average quantities on grid from atomiwise values.
 (e.g. local streaming velocity, local temperature)
 
+**Credits**: Inspiration for binning algorithm from binning module in ``mol_mod`` module in ``MD-Tracks`` package
+
+
 """
 
 import sys

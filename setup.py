@@ -16,6 +16,7 @@ except ImportError:
     from setuptools import setup, Extension, find_packages
     print("Using setuptools....")
 
+
 # ---------------------------------------------------------------------------
 #               Checking Python
 # ---------------------------------------------------------------------------
@@ -84,22 +85,20 @@ try:
 except DistributionNotFound:
     pytables_name = 'tables>=2.2'
 
-
 setup(
     name=NAME,
     version=VERSION,
     description=DESCRIPTION,
-    long_description=open("README.txt").read(),
+    long_description=open("README.rst").read(),
     author=AUTHOR,
     author_email=AUTHOR_EMAIL,
     license=LICENSE,
     url=URL,
     packages=find_packages(),
-
-    # dictionary mapping package names to lists of wildcard patterns
-    package_data={},
     scripts=script_files,
+
 #    ext_modules = [lammps_library],
+
     # Ordered in revrse order of dependancies
     install_requires=[
             pytables_name,
