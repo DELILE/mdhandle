@@ -92,7 +92,8 @@ Building the documentation at the local level reflects any changes made at the
 local level.  :mod:`mdhandle` must be in your ``PYTHONPATH`` to build docs using ``sphinx``.  
 
 A persistent version of the documentation reflecting the 
-github version is at http://github.com/dtlussier/mdhandle.
+github version is at http://dtlussier.github.com/mdhandle/ and
+on mirrored at http://mdhandle.readthedocs.org
 
 Authors
 ---------
