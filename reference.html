@@ -3132,6 +3132,7 @@ Information from any previous runs is lost.</p>
 <span id="binned-properties"></span><h3><a class="reference internal" href="#module-mdhandle.properties.binned_properties" title="mdhandle.properties.binned_properties"><tt class="xref py py-mod docutils literal"><span class="pre">binned_properties</span></tt></a><a class="headerlink" href="#module-mdhandle.properties.binned_properties" title="Permalink to this headline">¶</a></h3>
 <p>Calculate average quantities on grid from atomiwise values.
 (e.g. local streaming velocity, local temperature)</p>
+<p><strong>Credits</strong>: Inspiration for binning algorithm from binning module in <tt class="docutils literal"><span class="pre">mol_mod</span></tt> module in <tt class="docutils literal"><span class="pre">MD-Tracks</span></tt> package</p>
 <dl class="class">
 <dt id="mdhandle.properties.binned_properties.Grid">
 <em class="property">class </em><tt class="descclassname">mdhandle.properties.binned_properties.</tt><tt class="descname">Grid</tt><big>(</big><em>snap</em>, <em>calcs=None</em>, <em>wrap=True</em>, <em>use_selection=True</em>, <em>location='Node'</em><big>)</big><a class="reference internal" href="_modules/mdhandle/properties/binned_properties.html#Grid"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.properties.binned_properties.Grid" title="Permalink to this definition">¶</a></dt>
@@ -4443,7 +4444,7 @@ steps:</p>
 <li>Calculate the distances (or other usefull things) between coordinates
 in neighbouring bins.</li>
 </ol>
-<p><strong>Credits</strong>: Inspiration for binning algorithm from binning module from <tt class="docutils literal"><span class="pre">mol_mod</span></tt> module in <tt class="docutils literal"><span class="pre">MD-Tracks</span></tt> package</p>
+<p><strong>Credits</strong>: Inspiration for binning algorithm from binning module in <tt class="docutils literal"><span class="pre">mol_mod</span></tt> module in <tt class="docutils literal"><span class="pre">MD-Tracks</span></tt> package</p>
 <dl class="class">
 <dt id="mdhandle.properties.cell_decomposition.SparseBinning">
 <em class="property">class </em><tt class="descclassname">mdhandle.properties.cell_decomposition.</tt><tt class="descname">SparseBinning</tt><big>(</big><em>snap</em>, <em>grid_spacing=array([ 1.</em>, <em>1.</em>, <em>1.])</em>, <em>use_selection=True</em><big>)</big><a class="reference internal" href="_modules/mdhandle/properties/cell_decomposition.html#SparseBinning"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.properties.cell_decomposition.SparseBinning" title="Permalink to this definition">¶</a></dt>
@@ -4975,26 +4976,9 @@ based on snap file name and dataset name.</p>
 
 <dl class="method">
 <dt id="mdhandle.writers.xdmf.XDMFWriter.xmf_grid_init">
-<tt class="descname">xmf_grid_init</tt><big>(</big><em>grid_name</em>, <em>timestep</em><big>)</big><a class="reference internal" href="_modules/mdhandle/writers/xdmf.html#XDMFWriter.xmf_grid_init"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.writers.xdmf.XDMFWriter.xmf_grid_init" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">xmf_grid_init</tt><big>(</big><big>)</big><a class="reference internal" href="_modules/mdhandle/writers/xdmf.html#XDMFWriter.xmf_grid_init"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.writers.xdmf.XDMFWriter.xmf_grid_init" title="Permalink to this definition">¶</a></dt>
 <dd><p>Writes initial generic XML for both atom and gridded data
 to <tt class="docutils literal"><span class="pre">.xmf</span></tt> file.</p>
-<table class="docutils field-list" frame="void" rules="none">
-<col class="field-name" />
-<col class="field-body" />
-<tbody valign="top">
-<tr class="field"><th class="field-name">Parameters :</th><td class="field-body"><p class="first"><strong>grid_name</strong> : string</p>
-<blockquote>
-<div><p>Name for gridded dataset.
-Usually snap dataset name.</p>
-</div></blockquote>
-<p><strong>timestep</strong> : int</p>
-<blockquote class="last">
-<div><p>Timestep for gridded dataset (e.g. 101000).</p>
-</div></blockquote>
-</td>
-</tr>
-</tbody>
-</table>
 </dd></dl>
 
 <dl class="method">
@@ -6228,7 +6212,8 @@ Can also be done via LAMMPS <tt class="docutils literal"><span class="pre">mass<
 <p><strong>Credits</strong> :</p>
 <ul class="simple">
 <li>Uses <tt class="docutils literal"><span class="pre">log.py</span></tt> from Pizza v19Apr10 for reading LAMMPS log files
-(<a class="reference external" href="http://www.sandia.gov/~sjplimp/pizza.html">http://www.sandia.gov/~sjplimp/pizza.html</a>).</li>
+(<a class="reference external" href="http://www.sandia.gov/~sjplimp/pizza.html">http://www.sandia.gov/~sjplimp/pizza.html</a>).  Within <tt class="xref py py-mod docutils literal"><span class="pre">mdhandle</span></tt>
+it is renamed <tt class="docutils literal"><span class="pre">log_pizza.py</span></tt>.</li>
 </ul>
 <dl class="class">
 <dt id="mdhandle.readers.log.Log">
@@ -8038,7 +8023,7 @@ Can act as alternative to <a class="reference internal" href="#mdhandle.natsort.
 
 <dl class="function">
 <dt id="mdhandle.natsort.natsort">
-<tt class="descclassname">mdhandle.natsort.</tt><tt class="descname">natsort</tt><big>(</big><em>seq</em>, <em>cmp=&lt;function natcmp at 0x6653d70&gt;</em><big>)</big><a class="reference internal" href="_modules/mdhandle/natsort.html#natsort"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.natsort.natsort" title="Permalink to this definition">¶</a></dt>
+<tt class="descclassname">mdhandle.natsort.</tt><tt class="descname">natsort</tt><big>(</big><em>seq</em>, <em>cmp=&lt;function natcmp at 0x66b93b0&gt;</em><big>)</big><a class="reference internal" href="_modules/mdhandle/natsort.html#natsort"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.natsort.natsort" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sorts input list or tuple <em>in place</em>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -8060,7 +8045,7 @@ Can act as alternative to <a class="reference internal" href="#mdhandle.natsort.
 
 <dl class="function">
 <dt id="mdhandle.natsort.natsorted">
-<tt class="descclassname">mdhandle.natsort.</tt><tt class="descname">natsorted</tt><big>(</big><em>seq</em>, <em>cmp=&lt;function natcmp at 0x6653d70&gt;</em><big>)</big><a class="reference internal" href="_modules/mdhandle/natsort.html#natsorted"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.natsort.natsorted" title="Permalink to this definition">¶</a></dt>
+<tt class="descclassname">mdhandle.natsort.</tt><tt class="descname">natsorted</tt><big>(</big><em>seq</em>, <em>cmp=&lt;function natcmp at 0x66b93b0&gt;</em><big>)</big><a class="reference internal" href="_modules/mdhandle/natsort.html#natsorted"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.natsort.natsorted" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sorts input list or tuple as in <a class="reference internal" href="#mdhandle.natsort.natsort" title="mdhandle.natsort.natsort"><tt class="xref py py-func docutils literal"><span class="pre">natsort()</span></tt></a>, but returns a <em>copy</em>
 of original data rather than sorting in place.</p>
 <table class="docutils field-list" frame="void" rules="none">
