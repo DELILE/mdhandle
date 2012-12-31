@@ -41,6 +41,7 @@ def file_list(fn_base, verbose=False):
     -----------
     fn_base : string
         Absolute path to target files.  This is input to glob expression.
+        May include typical shell wildcards: ``'*'`` and ``'&'``.
     verbose : boolean
         Flag for verbosity of user input/output.
 
@@ -160,7 +161,9 @@ def cull_flist_by_function(flist, culling_function, verbose=False):
 
     """
     if len(flist) == 0:
-        return []
+        if verbose is True:
+            logger.warning('Input file list was empty - nothing to do.')
+        return [], []
 
     fn_return = [f for f in flist if (culling_function(f) is True)]
     fn_culled = [f for f in flist if (culling_function(f) is False)]

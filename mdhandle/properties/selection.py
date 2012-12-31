@@ -89,6 +89,25 @@ class Selection(object):
 
 # ------------------- Selection Functions -------------------------------------
 
+def mask_exists(mask_array):
+    """
+    Selection function for the case where the mask array already exists
+    from a previous calculation.
+    
+    Parameters
+    ----------
+    mask_array : `numpy.ndarray`
+        Masking array in the correct format for selection.
+    
+    Returns
+    -------
+    masking_function : callable
+        Function for selecting liquid atoms.
+    
+    """
+    def masking_function(s):
+        return mask_array
+    return masking_function
 
 def liquid_only(threshold, fluid_atom_type, coord_name='coord'):
     """
@@ -138,7 +157,7 @@ def fluid_only(fluid_atom_types):
         Function for selecting fluid atoms.
     """
     def masking_function(s):
-        mask = np.ones(s.num_atoms, dtype=bool)
+        mask = np.ones(s.meta['num_atoms'], dtype=bool)
         snap_type = s.get_scalar('type', raw_data=True)
         for i in fluid_atom_types:
             mask *= (snap_type == int(i))
@@ -220,6 +239,10 @@ def box(corner_low, dimensions, inside=True):
     """
     # TODO: Generalize to box that is not aligned to coordinate directions.
 
+    # Converting inputs to Numpy array if not already
+    corner_low = np.array(corner_low)
+    dimensions = np.array(dimensions)
+
     corner_high = corner_low + dimensions
 
     def masking_function(s):
@@ -254,6 +277,10 @@ def sphere(centre, radius, inside=True):
     masking_function : callable
         Function for selecting atoms with coordinates inside 3D sphere.
     """
+    # Converting input vectors to Numpy array if not already
+    centre = np.array(centre)
+
+    
     def masking_function(s):
         xyz = s.get_vector(('x', 'y', 'z'), raw_data=True)
         mask = vectors.sq_magnitude(xyz-centre) < radius**2

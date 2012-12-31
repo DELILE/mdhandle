@@ -140,7 +140,7 @@ class SimContainer(object):
             Single line string representation of :class:`simContainer`.
 
         """
-        string_rep = '%s - %s - %s' % \
+        string_rep = '%s - %s - id: %s' % \
                     (self.meta['sim_name'], self.active_dataset_name, id(self))
         return string_rep
 

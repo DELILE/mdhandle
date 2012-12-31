@@ -130,7 +130,7 @@ def main(argv=None):
         making_data.body_velocities()
         making_data.finish()
 
-        calc = atom_props.NonLammps(snap, options.lammps_in, props_list)
+        calc = atom_props.NonLocalLammps(snap, options.lammps_in, props_list)
         calc.run()
 
         for calc_name in props_list:

@@ -169,7 +169,6 @@ class Logger(object):
         """
         print('!! ERROR:')
         print('    %s' % msg)
-        raise Exception
 
 
 #=============================================================================

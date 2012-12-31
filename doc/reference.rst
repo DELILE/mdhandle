@@ -115,7 +115,7 @@ Property Calculations
    .. automethod:: _calc_stress 
    .. automethod:: _calc_diff
 
-.. autoclass:: mdhandle.properties.atom_properties.NonLammps
+.. autoclass:: mdhandle.properties.atom_properties.NonLocalLammps
    :members:
    :inherited-members:
    :show-inheritance:

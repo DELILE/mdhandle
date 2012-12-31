@@ -167,7 +167,7 @@ class Snap(object):
             String representation of object (< 80 chars).
 
         """
-        string_rep = 'Snap %s - %s - %s' % (self.fn_base,
+        string_rep = 'Snap %s - %s - id: %s' % (self.fn_base,
                                             self.active_dataset_name, id(self))
         return string_rep
 
@@ -235,7 +235,8 @@ Num. Atoms: \t %s
                 self.tensors = {}
                 self.symm_tensors = {}
             else:
-                self.logger.error('Requested dataset %s does not exist' % name)
+                self.logger.error('Requested dataset %s does not exist in %s' % 
+                                        (name, self.filename))
 
     def get_datasets(self):
         """
@@ -367,7 +368,8 @@ Num. Atoms: \t %s
 
     def good_grid(self):
         """
-        If active dataset in HDF file returns ``True``.
+        If the active dataset in HDF file is a known type as stored
+        in :attr:`mdhandle.settings.IMPLEMENTED_GRIDS`, returns ``True``.
 
         """
         if self.meta['grid_type'] in settings.IMPLEMENTED_GRIDS:

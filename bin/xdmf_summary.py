@@ -37,11 +37,11 @@ def main(argv=None):
                        metavar="FNBASE",
                        default=None)
     parser.add_option("-d", "--dataset", action="store", dest="data_set",
-                       help="Dataset name",
+                       help="Dataset name, [default=rawSimResults]",
                        metavar="DATASET",
                        default='rawSimResults')
     parser.add_option("-t", "--time", action="store", dest="time",
-                       help="time_lo time_hi t_interval - like range function",
+                       help="time_lo time_hi t_interval - inclusive",
                        metavar="TIME",
                        type="int", nargs=3, default=None)
     parser.set_defaults(verbose=False)
@@ -70,7 +70,9 @@ def main(argv=None):
             logger.completion_msg('Exiting')
             return -1
 
-        time_list = range(options.time[0], options.time[1], options.time[2])
+        # Produced list of times - inclusive of time_hi
+        time_list = range(options.time[0], options.time[1]+options.time[2],
+                                           options.time[2])
         flist, fn_culled2 = util.cull_flist_by_time(flist, time_list, 
                                                            options.verbose)
 

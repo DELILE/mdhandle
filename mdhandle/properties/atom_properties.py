@@ -29,6 +29,7 @@ from mdhandle.settings import PROP_SIZE, DTYPES
 # TODO: Add additional class like NonLocal to handle other unit types
 #       - or add unit factors like in mdhandle.properties.snap_properties
 
+
 # -----------------------------------------------------------------------------
 
 logger = Logger()
@@ -564,7 +565,7 @@ class NonLocal(AtomCalc):
         Calculates the distance (magnitude and vector) between ``atom_id`` and
         other atoms in the snap.
 
-        Calculated distance is limited by :attr:`NonLammps.cutoff`.
+        Calculated distance is limited by :attr:`NonLocalLammps.cutoff`.
 
         Resuts are stored in :attr:`NonLocal.diff` and
         :attr:`NonLocal.diff_mag`.
@@ -659,12 +660,12 @@ class NonLocal(AtomCalc):
 
 
 # TODO: Use overt Python calls to LAMMPS library rather than input file.
-#           - e.g. calculations defined by NonLammps method not input file
+#           - e.g. calculations defined by NonLocalLammps method not input file
 # TODO: Add call to generate LAMMPS data file from snap object at run time.
 # TODO: Extend to other types of properties fix, atom properties (velocity)
 
 
-class NonLammps(AtomCalc):
+class NonLocalLammps(AtomCalc):
     """
     Class used for calculating non-local properties using a Python wrapped
     LAMMPS library to perform the calculation.
@@ -700,7 +701,7 @@ class NonLammps(AtomCalc):
         which must match the name of LAMMPS compute.
 
         To add additional calculaion types must add additional item
-        using :meth:`NonLammps.add_new_calc` method.
+        using :meth:`NonLocalLammps.add_new_calc` method.
     lammps_log : string, [default='lammps_mdhandle.log']
         Log file name for LAMMPS run.
 
@@ -713,9 +714,9 @@ class NonLammps(AtomCalc):
     cutoff : float
         Cutoff associated with interatomic interaction.
     results : dict
-        All results from calculations in :attr:`NonLammps.to_calc`
+        All results from calculations in :attr:`NonLocalLammps.to_calc`
         are stored in `dict` organized by name.  Results also stored in
-        attributes of :class:`NonLammps`.
+        attributes of :class:`NonLocalLammps`.
 
     Methods
     --------
@@ -723,17 +724,17 @@ class NonLammps(AtomCalc):
         Add metadata for new calculation function.
         Overrides completely :meth:`AtomCalc.add_new_calc`.
     run()
-        Runs all calculations stored in :attr:`NonLammps.to_calc`.
+        Runs all calculations stored in :attr:`NonLocalLammps.to_calc`.
 
     """
 
     def __init__(self, snap, input_fn, cutoff, calcs=None, wrap=True,
                                        lammps_log='lammps_mdhandle.log'):
-        super(NonLammps, self).__init__(snap, calcs, wrap)
+        super(NonLocalLammps, self).__init__(snap, calcs, wrap)
         self.input_fn = input_fn
         self.lammps_log = lammps_log
 
-        # Not currently used within NonLammps obj
+        # Not currently used within NonLocalLammps obj
         self.cutoff = cutoff
 
         # Default calculations
@@ -742,7 +743,7 @@ class NonLammps(AtomCalc):
         self.add_new_calc('force', collection_type='vectors')
         self.add_new_calc('stress', collection_type='symm_tensors')
 
-        # must be called before NonLammps.run(...)
+        # must be called before NonLocalLammps.run(...)
         self.setup_calculations()
 
     def add_new_calc(self, name, dtype='float', collection_type='scalars',
@@ -751,9 +752,9 @@ class NonLammps(AtomCalc):
         Adds information about the output of a new calculation type beyond the
         default set: ``['coord', 'epair', 'force', 'stress']``
 
-        For :class:`NonLammps`, new calculations are defined within the
-        LAMMPS data file rather than via a NonLammps method.  Therefore, the
-        name must match the name of the LAMMPS compute.
+        For :class:`NonLocalLammps`, new calculations are defined within the
+        LAMMPS data file rather than via a NonLocalLammps method.  Therefore,
+        the name must match the name of the LAMMPS compute.
 
         Parameters
         -----------
@@ -769,18 +770,18 @@ class NonLammps(AtomCalc):
             :class:`AtomCalc`, only `'Node'` is relevant.
 
         """
-        super(NonLammps, self).add_new_calc(name, dtype, 
+        super(NonLocalLammps, self).add_new_calc(name, dtype, 
                                                   collection_type, location)
         logger.warning('Add new calculation %s to LAMMPS input file' % name)
 
     def run(self):
         """
         Launches LAMMPS based calculation defined by requested calculations and
-        the LAMMPS input file (:attr:`NonLammps.input_fn`).
+        the LAMMPS input file (:attr:`NonLocalLammps.input_fn`).
 
-        Result of calculations stored in :attr:`NonLammps.results` and
-        :class:`NonLammps` attribute with name corresponding
-        to the calculation name stored in :attr:`NonLammps.calcs`.
+        Result of calculations stored in :attr:`NonLocalLammps.results` and
+        :class:`NonLocalLammps` attribute with name corresponding
+        to the calculation name stored in :attr:`NonLocalLammps.calcs`.
 
         """
 
@@ -818,7 +819,7 @@ class NonLammps(AtomCalc):
 
                 tmp = lmp.lazy_extract_compute(name, output_type)
 
-                # Saving output to NonLammps.results.
+                # Saving output to NonLocalLammps.results.
                 self.results[name] = np.ctypeslib.as_array(tmp).\
                                         reshape((self.snap.meta['num_atoms'], 
                                                             PROP_SIZE[name]))

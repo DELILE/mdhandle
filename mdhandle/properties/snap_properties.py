@@ -17,7 +17,8 @@ import mdhandle.utilities as util
 
 # TODO: Consider refactoring into Snap module.
 # TODO: Add optional mass weighting throughout.
-# TODO: Add function to add new calculations
+# TODO: Add function to add new calculations  
+# TODO: register if snap selections change between calcultions.
 
 # -----------------------------------------------------------------------------
 
@@ -92,7 +93,7 @@ class SnapProperties(object):
             Units should be consistent with snap units.
 
         """
-        self.volume = volume
+        self.volume = float(volume)
 
     def get_volume_density(self, prop_name):
         """
@@ -355,9 +356,18 @@ class SnapProperties(object):
         self.pressure = -(1./3.)*(self.stress[0]+self.stress[3]+self.stress[5])
         return self.pressure
 
-    def com_pos_vel(self):
+    def com_pos_vel(self, weight='mass'):
         """
         Calculates the position and centre of mass (CoM) of snap.
+        
+        Atomic position can be weighted by mass or by any other atomwise
+        scalar.
+
+        Parameters
+        -----------
+        weight : string
+            Name of scalar used to weigh atom positions in calculation of 
+            centre of mass. [default='mass']
 
         Returns
         -------
@@ -367,16 +377,25 @@ class SnapProperties(object):
             Snap centre of mass velocity.
 
         """
-        if not hasattr(self, 'mass'):
-            self.mass_total()
+        if not hasattr(self, weight):
+            if weight == 'mass':
+                weighting_total = self.mass_total()
+            else:
+                if weight in self.snap.meta['col_mapping']:
+                    weighting_total = self.other_total(weight)
+                else:
+                    logger.error('Weighting scalar %s is not present' % weight)
+                    raise Exception
 
         xyz = self.snap.get_vector(('x', 'y', 'z'))
-        mass = self.snap.get_scalar('mass')
+        weighting_scalar = self.snap.get_scalar(weight)
         atom_vel = self.snap.get_vector(('vx', 'vy', 'vz'))
 
-        self.com = (xyz.T*mass.T).T.sum(axis=0) / self.mass
-        self.com_velocity = ((atom_vel.T*mass.T).T.sum(axis=0)) / self.mass
+        self.com = (xyz.T*weighting_scalar.T).T.sum(axis=0) / weighting_total
+        self.com_velocity = ((atom_vel.T*weighting_scalar.T).T.sum(axis=0)) \
+                                                               / weighting_total
         return self.com, self.com_velocity
+
 
 
 # =============================================================================

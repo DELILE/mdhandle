@@ -45,12 +45,12 @@ def main(argv=None):
                        metavar="FILES",
                        default=None)
     parser.add_option("-c", "--calcs", action="append", dest="calcs",
-                      help='Calculations to perform, space separated.',
+                      help='Name of calculations to perform.  Repeat if req.',
                       metavar="CALCS",
                       default=None)
-    parser.add_option("-s", "--spacing", action="append", dest="spacing",
-                      help="Grid spacing, [dx, dy, dz]", metavar="SPACE",
-                      default=None)
+    parser.add_option("-s", "--spacing", action="store", dest="spacing",
+                      help="Grid spacing: dx dy dz", metavar="SPACE",
+                      type='float', nargs=3, default=None)
     parser.add_option("-n", "--name", action="store", dest="new_dataset",
                       help="Name of new binned dataset.", metavar="NAME",
                       default=None)
@@ -60,6 +60,8 @@ def main(argv=None):
 
     logger = Logger()
     logger.procedure_banner('Running Binning Calculation')
+    
+    logger.warning('This version of binned_calc.py only for fluid only systems')
 
     if options.fn_base is None:
         logger.warning('File search string needed.')
@@ -70,7 +72,6 @@ def main(argv=None):
     flist, fn_culled = util.cull_flist_by_function(flist, valid_file,
                                                           options.verbose)
 
-    logger.user_message('Files to be processed: ')
     util.print_file_list(flist, 'the list')
 
     if util.user_approve('Is this list of files correct?') is not True:
@@ -103,8 +104,22 @@ def main(argv=None):
                                                                 dataset name")
     else:
         # Eliminating spaces and underscores in new_dataset from cmd line
-        new_dataset = ''.join(new_dataset.split())
+        new_dataset = ''.join(options.new_dataset.split())
         new_dataset = ''.join(new_dataset.split('_'))
+
+    if options.calcs is None:
+        good_input = False
+        while good_input is False:
+            calcs = logger.request('Enter Python list of grid calc names: ',
+                                     input_type='input')
+            if isinstance(calcs, list) is True:
+                good_input = True
+            else:
+                logger.bad_input('Submitted calc names must be contained\
+                                  in a list')
+    else:
+        calcs = options.calcs
+
 
     for fn in flist:
         snap = Snap(fn, dataset_name='rawSimResults')

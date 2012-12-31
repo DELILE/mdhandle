@@ -23,7 +23,7 @@ import sys
 import numpy as np
 
 # LAMMPS log class.
-from mdhandle.readers.log_pizza import log
+from mdhandle.readers import log_pizza
 from mdhandle.logger import Logger
 
 #------------------------------------------------------------------------------
@@ -79,7 +79,7 @@ class Log(object):
 
         """
         self.log_fn = log_fn
-        self._log_pizza = log.log(self.log_fn)
+        self._log_pizza = log_pizza.log(self.log_fn)
 
         # Pulling metadata up into Log(...) object
         self.flist = self._log_pizza.flist

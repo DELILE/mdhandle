@@ -7,6 +7,9 @@ Enables ipython interaction for from automated scripts and other routines.
 
 Calling :func:`interactive.launch_ipshell` will launch iPython as a subshell.
 
+TODO:
+    - Add function to handle detecting if it is iPython. 
+    - Modify iPython shell prompt so clear when in newly launched iPython
 
 **References**:
 
@@ -20,8 +23,11 @@ import sys
 
 # Import the embed function
 from IPython.frontend.terminal.embed import InteractiveShellEmbed
+from mdhandle.logger import Logger
 
 # -----------------------------------------------------------------------------
+
+logger = Logger()
 
 def launch_ipython():
     """
@@ -29,6 +35,13 @@ def launch_ipython():
 
     Wrapper around ``InteractiveShellEmbed`` function from
     ``IPython.frontend.terminal.embed``.
+    
+    Note: Due to current bug in iPython 0.12 this function has no effect from
+    within iPython itself.
+    
+    To get an interactive session - run the surrounding script from the regular
+    python interpretor instead to allow execution to drop into an interactive 
+    session.
 
     """
     # Trying if already in iPython 
@@ -36,7 +49,10 @@ def launch_ipython():
         get_ipython
         # TODO: returning None required to account for bug as in:
         #       https://github.com/ipython/ipython/issues/1045
-        #       Cannot embed IPython in IPython.
+        #       Cannot embed IPython in IPython.              
+
+        logger.warning('Due to iPython bug (v0.12) interactive session not \
+                        available from within iPython itself.')
         return None
     except NameError:
         banner = exit_msg = ''

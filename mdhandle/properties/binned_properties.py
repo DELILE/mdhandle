@@ -91,8 +91,8 @@ class Grid(object):
         If ``calcs is None``, then all existing calculations are performed.
         Existing calculations :
             ``['count', 'num_density', 'mass', 'mass_density',``
-            ``'epair_specific', 'coord_specific', 'velocity',``
-            ``'ke_specific', 'force_specific', 'temp', 'stress']``
+            ``'epair_count', 'coord_count', 'velocity',``
+            ``'ke_count', 'force_count', 'temp', 'stress']``
     wrap : boolean, [default=True]
         If ``True``, coordinates in active data set in snap are
         wrapped to the central simulation cell subject to PBC.
@@ -163,6 +163,8 @@ class Grid(object):
 
     def __init__(self, snap, calcs=None, wrap=True, use_selection=True,
                                                     location='Node'):
+
+        logger.user_message('Using abstract ABC Grid __init__() function')
         self.snap = snap
         self.snap.gather_data()
 
@@ -266,7 +268,8 @@ class Grid(object):
             logger.error('Mapping function %s does not exist' % name)
 
     def add_new_calc(self, calc_name, dtype='float', collection_type='scalars',
-                                      location='Node', atomwise_name=None):
+                                      location='Node', atomwise_name=None,\
+                                      run_setup=False):
         """
         Adds metadata about the output of a new calculation type beyond the
         default set.
@@ -292,6 +295,10 @@ class Grid(object):
             :attr:`Grid.snap`. Each ``dict`` entry is formatted as:
         
             ``'identifying_name':'name_in_snap'``
+        run_setup : boolean, [default=False]
+            Runs :meth:`Grid.setup_calculations` after new calculationi is
+            added.  Not recommended for use during initial setup such as
+            in grid __init__.
         
         """
         dtype = dtype.lower()
@@ -314,7 +321,9 @@ class Grid(object):
         self._all_calcs[calc_name] = {'dtype': dtype, 'location': location,
                                       'type': collection_type,
                                       'atomwise_name': atomwise_name}
-        self.setup_calculations()
+
+        if run_setup is True:
+            self.setup_calculations()
 
     def setup_calculations(self):
         """
@@ -338,13 +347,13 @@ class Grid(object):
         for i in to_loop:
             self.to_calc[i] = self._all_calcs[i]
 
-            if i['type'] == 'scalars':
+            if self.to_calc[i]['type'] == 'scalars':
                 self.scalars[i] = self._all_calcs[i]
-            elif i['type'] == 'vectors':
+            elif self.to_calc[i]['type'] == 'vectors':
                 self.vectors[i] = self._all_calcs[i]
-            elif i['type'] == 'tensors':
+            elif self.to_calc[i]['type'] == 'tensors':
                 self.tensors[i] = self._all_calcs[i]
-            elif i['type'] == 'symm_tensors':
+            elif self.to_calc[i]['type'] == 'symm_tensors':
                 self.symm_tensors[i] = self._all_calcs[i]
 
         # Human readable.
@@ -401,10 +410,10 @@ class Grid(object):
            This method must be called before :meth:`Grid.run_calc`.
 
         """
-        if self._run_once['run_mapping'] is True:
+        if self._run_once['run_binning'] is True:
             logger.error('Grid calculation cannot be run more than once.')
         else:
-            self._run_once['run_mapping'] = True
+            self._run_once['run_binning'] = True
             self.mapping_func(*args, **kwargs)
 
     def run_calc(self):
@@ -454,7 +463,7 @@ class Grid(object):
         """
         for req in list_reqs:
             if not hasattr(self, req):
-                self.results[req] = getattr(self, 'calc_' + req)()
+                self.results[req] = getattr(self, '_calc_' + req)()
                 setattr(self, req, self.results[req])
             else:
                 continue
@@ -481,7 +490,6 @@ class Grid(object):
         """
         # Defining helper function to get atom values
         # back from grid_value.
-        @np.vectorize
         def get_total_weighting(idx, weights):
             """
             Calculates the weighted average of grid values
@@ -510,13 +518,26 @@ class Grid(object):
             """
             if idx is not None:
                 total = fsum(weights)
-                prod = fsum([grid_value[i]*w for (i, w) in zip(idx, weights)])
+                temp = [grid_value[i]*w for (i, w) in zip(idx, weights)]
+                                
+                prod = np.array(temp).sum(axis = 0)
                 return prod / total
             else:
-                return 0.0
+                return np.zeros(prod.shape)
 
-        atom_value = get_total_weighting(self.grid_to_atom[:,0],
-                                         self.grid_to_atom[:,1])
+        # end get_total_weighting(...)
+        vec_get_total_weighting = np.vectorize(get_total_weighting, 
+                                               otypes=[np.object,])
+        
+        
+        tmp = vec_get_total_weighting(self.grid_to_atom[:,0], 
+                                      self.grid_to_atom[:,1])
+
+        atom_value = np.zeros((tmp.shape[0], tmp[0].shape[0]))
+        for i in range(tmp.shape[0]):
+            for j in range(tmp[0].shape[0]):
+                atom_value[i,j] = tmp[i,j]
+
         return atom_value
 
     def _sum_from_atom_value(self, atom_value):
@@ -584,10 +605,6 @@ class Grid(object):
 
         """
         count = self._sum_from_atom_value(1.0)
-
-        # Call _coverage() and _coverage()
-        self._coverage()
-        self._num_atoms()
         return count
 
     def _num_atoms(self):
@@ -873,7 +890,7 @@ class Grid(object):
             :attr:`Grid.stress` in `Grid.run()`.
 
         """
-        stress_name = self._all_calcs['stress']['atomwise']['stress']
+        stress_name = self._all_calcs['stress']['atomwise_name']['stress']
         stress_comps = self.snap.symm_tensors[stress_name]['comps']
 
         s = self.snap.get_symm_tensor(stress_comps, raw_data=(not self.use_sel))
@@ -1003,12 +1020,9 @@ class RectGrid(Grid):
                              location='Node'):
 
         super(RectGrid,self).__init__(snap, calcs, wrap, selection, location)
-
         
         self.origin = origin.astype(np.float)
         self.grid_spacing = grid_spacing.astype(np.float)
-
-        self.elem_volume = np.prod(self.grid_spacing)
 
         self._matrix = np.diag(axes).astype(np.float)
 
@@ -1033,10 +1047,18 @@ class RectGrid(Grid):
         self.remainder = np.mod(self._boxL, self.grid_spacing)
         self._boxL -= self.remainder
 
-        self.num_elem = (np.floor(1.0*self._boxL/self.grid_spacing) +
-                                                    np.ones(3)).astype(np.int)
 
         self.set_mapping_function(mapping)
+        self.setup_calculations()
+                      
+    @property
+    def num_elem(self):
+        return (np.floor(1.0*self._boxL/self.grid_spacing) +
+                                                      np.ones(3)).astype(np.int)
+
+    @property
+    def elem_volume(self):
+        return np.prod(self.grid_spacing)
 
     def mapping_func(self):
         """
