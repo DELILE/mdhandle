@@ -41,7 +41,8 @@ def main(argv=None):
                        metavar="DATASET",
                        default='rawSimResults')
     parser.add_option("-t", "--time", action="store", dest="time",
-                       help="time_lo time_hi t_interval - inclusive",
+                       help="time_lo time_hi t_interval - inclusive.\n\
+                             set t_interval to 1 to select all.",
                        metavar="TIME",
                        type="int", nargs=3, default=None)
     parser.set_defaults(verbose=False)
@@ -62,6 +63,7 @@ def main(argv=None):
     if options.time is not None:
         if len(options.time) != 3:
             logger.warning('Time values provide must be t_lo t_hi t_interval')
+            logger.warning('Set t_interval to 1 to select all on [t_lo, t_hi]')
             logger.completion_msg('Exiting')
             return -1
 
@@ -70,15 +72,24 @@ def main(argv=None):
             logger.completion_msg('Exiting')
             return -1
 
-        # Produced list of times - inclusive of time_hi
-        time_list = range(options.time[0], options.time[1]+options.time[2],
-                                           options.time[2])
-        flist, fn_culled2 = util.cull_flist_by_time(flist, time_list, 
-                                                           options.verbose)
+        if options.time[2] == 1:
+            # Using all timesteps that matched the glob
+            flist_culled = []
+        else:
+            # Produced list of times - inclusive of time_hi
+            time_list = range(options.time[0], options.time[1]+options.time[2],
+                                               options.time[2])
+            flist, flist_culled = util.cull_flist_by_time(flist, time_list, 
+                                                               options.verbose)
 
     logger.user_message('Files to be processed for dataset=%s:' % 
                                                             options.data_set)
+
     util.print_file_list(flist)
+    
+    if options.verbose is True:
+        logger.user_message('Number of files culled from glob: %s' 
+                            % len(flist_culled) )
 
     if util.user_approve('Is this list of files correct?') is not True:
         logger.completion_msg('Exiting script.  Please try again.')
