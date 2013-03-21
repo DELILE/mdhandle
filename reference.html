@@ -7524,7 +7524,8 @@ parameter for 12-6 LJ potential in K.</td>
 <tr class="field-odd field"><th class="field-name">Parameters :</th><td class="field-body"><p class="first"><strong>msg</strong> : string</p>
 <p><strong>speak</strong> : boolean</p>
 <blockquote class="last">
-<div><p>If <tt class="docutils literal"><span class="pre">True</span></tt>, calls system to say message.</p>
+<div><p>If <tt class="docutils literal"><span class="pre">True</span></tt>, calls system to say message.
+[default=False]</p>
 </div></blockquote>
 </td>
 </tr>
@@ -7552,7 +7553,7 @@ parameter for 12-6 LJ potential in K.</td>
 
 <dl class="method">
 <dt id="mdhandle.logger.Logger.request">
-<tt class="descname">request</tt><big>(</big><em>msg=''</em>, <em>input_type='raw'</em>, <em>speak=True</em><big>)</big><a class="reference internal" href="_modules/mdhandle/logger.html#Logger.request"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.logger.Logger.request" title="Permalink to this definition">¶</a></dt>
+<tt class="descname">request</tt><big>(</big><em>msg=''</em>, <em>input_type='raw'</em>, <em>speak=False</em><big>)</big><a class="reference internal" href="_modules/mdhandle/logger.html#Logger.request"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.logger.Logger.request" title="Permalink to this definition">¶</a></dt>
 <dd><p>Used for printing user requests and questions.</p>
 <p>Utilizes either <tt class="docutils literal"><span class="pre">input()</span></tt> or <tt class="docutils literal"><span class="pre">raw_input()</span></tt>
 functions from standard library depending on value of <tt class="docutils literal"><span class="pre">input_type</span></tt></p>
@@ -7570,7 +7571,8 @@ functions from standard library depending on value of <tt class="docutils litera
 </div></blockquote>
 <p><strong>speak</strong> : boolean</p>
 <blockquote class="last">
-<div><p>If <tt class="docutils literal"><span class="pre">True</span></tt>, calls system to speak request.</p>
+<div><p>If <tt class="docutils literal"><span class="pre">True</span></tt>, calls system to speak request.
+[default=False]</p>
 </div></blockquote>
 </td>
 </tr>
@@ -8073,7 +8075,7 @@ Can act as alternative to <a class="reference internal" href="#mdhandle.natsort.
 
 <dl class="function">
 <dt id="mdhandle.natsort.natsort">
-<tt class="descclassname">mdhandle.natsort.</tt><tt class="descname">natsort</tt><big>(</big><em>seq</em>, <em>cmp=&lt;function natcmp at 0x10c9e8320&gt;</em><big>)</big><a class="reference internal" href="_modules/mdhandle/natsort.html#natsort"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.natsort.natsort" title="Permalink to this definition">¶</a></dt>
+<tt class="descclassname">mdhandle.natsort.</tt><tt class="descname">natsort</tt><big>(</big><em>seq</em>, <em>cmp=&lt;function natcmp at 0x10d0b6398&gt;</em><big>)</big><a class="reference internal" href="_modules/mdhandle/natsort.html#natsort"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.natsort.natsort" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sorts input list or tuple <em>in place</em>.</p>
 <table class="docutils field-list" frame="void" rules="none">
 <col class="field-name" />
@@ -8095,7 +8097,7 @@ Can act as alternative to <a class="reference internal" href="#mdhandle.natsort.
 
 <dl class="function">
 <dt id="mdhandle.natsort.natsorted">
-<tt class="descclassname">mdhandle.natsort.</tt><tt class="descname">natsorted</tt><big>(</big><em>seq</em>, <em>cmp=&lt;function natcmp at 0x10c9e8320&gt;</em><big>)</big><a class="reference internal" href="_modules/mdhandle/natsort.html#natsorted"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.natsort.natsorted" title="Permalink to this definition">¶</a></dt>
+<tt class="descclassname">mdhandle.natsort.</tt><tt class="descname">natsorted</tt><big>(</big><em>seq</em>, <em>cmp=&lt;function natcmp at 0x10d0b6398&gt;</em><big>)</big><a class="reference internal" href="_modules/mdhandle/natsort.html#natsorted"><span class="viewcode-link">[source]</span></a><a class="headerlink" href="#mdhandle.natsort.natsorted" title="Permalink to this definition">¶</a></dt>
 <dd><p>Sorts input list or tuple as in <a class="reference internal" href="#mdhandle.natsort.natsort" title="mdhandle.natsort.natsort"><tt class="xref py py-func docutils literal"><span class="pre">natsort()</span></tt></a>, but returns a <em>copy</em>
 of original data rather than sorting in place.</p>
 <table class="docutils field-list" frame="void" rules="none">
