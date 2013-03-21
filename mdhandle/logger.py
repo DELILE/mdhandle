@@ -81,11 +81,14 @@ class Logger(object):
         msg : string
         speak : boolean
             If ``True``, calls system to say message.
+            [default=False]
 
         """
         if speak is True and sys.platform == 'darwin':
             # Platform dependent: OS X only
             os.system('say "%s"' % msg)
+        elif sys.platform == 'darwin':
+            pass
         else:
             # Other platforms
             print('Speak option is not available outside OS X')
@@ -104,7 +107,7 @@ class Logger(object):
         """
         print('+ %s' % msg)
 
-    def request(self, msg='', input_type='raw', speak=True):
+    def request(self, msg='', input_type='raw', speak=False):
         """
         Used for printing user requests and questions.
         
@@ -119,16 +122,23 @@ class Logger(object):
            Selects the type of function used for catching user input.
         speak : boolean
             If ``True``, calls system to speak request.
+            [default=False]
 
         """
-        if speak is True:
-            # TODO: Platform dependent: OS X only
+        if speak is True and sys.platform == 'darwin':
+            # Platform dependent: OS X only
             os.system('say "%s"' % msg)
+        elif sys.platform == 'darwin':
+            pass
+        else:
+            # Other platforms
+            print('Speak option is not available outside OS X')
+            print('Completion message will be printed but not spoken.')
         
         if input_type == 'raw':
-            return raw_input('>> %s: ' % msg)
+            return raw_input('>> %s ' % msg)
         elif input_type == 'input':
-            return input('>> %s: ' % msg)
+            return input('>> %s ' % msg)
         else:
             self.error('@ Input type %s does not exist' % input_type)
 

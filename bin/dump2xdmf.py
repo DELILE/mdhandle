@@ -83,7 +83,8 @@ def process_single(fn, col_mapping, vectors, tensors,
 
     """
 
-    reader = LAMMPS_dump(fn, col_mapping)
+    reader = LAMMPS_dump(fn)
+    reader.read_header()
 
     if reader.meta['ncol'] != len(col_mapping):
         logger.error(
@@ -92,6 +93,10 @@ Column mapping does not agree with columns in LAMMPS dump.
 LAMMPS dump --> %s
 Column Mapping --> %s
         """ % (reader.meta['ncol'], len(col_mapping)))
+        logger.error('---- Quitting -----')
+        return 2
+
+    reader.read_body(col_mapping)
 
     fn_hdf = os.path.splitext(fn)[0] + '.h5'
     snap = Snap(fn_hdf, dataset_name='rawSimResults', is_new_data=True)
@@ -224,10 +229,12 @@ def main(argv=None):
     symm_tensors = {}
 
     if options.fn_col is None or os.path.exists(options.fn_col) is not True:
+        
+        # TODO: Add ability to read config file even if self-describing
         if util.user_approve('New self-describing LAMMPS dump?') is True:
             col_mapping = col.lammps_mapping(flist[0])
-        # TODO: Eliminate or require config file
-        else:
+
+        else:          # TODO: Eliminate or require config file
             good_input = False
             while not good_input:
                 fn_col = logger.request('Column mapping file [blank if none]: ',
@@ -287,6 +294,8 @@ def main(argv=None):
 
     good_input = False
     while not good_input:
+        # TODO: Handle problem of invalid syntax in input
+        #       Currently causes failure because of input_type='input'
         pbc = logger.request('Enter PBC [list of bool]: ', input_type='input')
         pbc = np.array(pbc, dtype=np.bool)
         if pbc.shape != (3,):
@@ -298,6 +307,8 @@ def main(argv=None):
     if 'mass' not in col_mapping:
         good_input = False
         while not good_input:
+            # TODO: Handle problem of invalid syntax in input
+            #       Currently causes failure because of input_type='input'
             mass = logger.request('Enter of masses of atom types [list]: ',
                                   input_type='input')
             if (isinstance(mass, list) or isinstance(mass, tuple)) is not True:

@@ -82,7 +82,7 @@ class LAMMPS_dump(object):
 
         # First two words of line are 'ITEM:' 'ATOMS'.
         # If old-style LAMMPS dump, self.meta['description'] == []
-        self.meta['description'] = f.readline().split[2:]
+        self.meta['description'] = f.readline().split()[2:]
 
         if len(self.meta['description']) > 0:
             self.is_self_describing = True

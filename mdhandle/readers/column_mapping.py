@@ -58,7 +58,9 @@ def lammps_mapping(dump_fn):
     # First two items are 'ITEM' and 'ATOMS'
     self_description = self_description.split()[2:]
 
-    logger.request('Input dtype and grid location:', input_type='raw')
+    logger.user_message('Input dtype [int | float ] and')
+    logger.user_message('location [Node | Cell]:')
+
 
     columnsDict = {}
     for col, name in enumerate(self_description):
@@ -89,10 +91,9 @@ def lammps_mapping(dump_fn):
 
     if util.user_approve('Is this mapping correct?') is True:
         if util.user_approve('Print column data to file?') is True:
-            logger.request('Column file name: ')
-            out_fn = raw_input('>>> ')
+            out_fn = logger.request('Column file name: ')
             outf = open(out_fn, 'w')
-            outf.write('#column name dtype location')
+            outf.write('# column name dtype location\n')
             for k in columnsDict:
                 outf.write("%d %s %s %s\n" % (columnsDict[k]['col'], k,
                                               columnsDict[k]['dtype'],
@@ -369,7 +370,7 @@ def _identify_collections(col_mapping, kind='vectors'):
         collection[name] = dict(comps=components, dtype=dtype,
                                                   location=location)
 
-    if components == {}:
+    if collection == {}:
         logger.user_message('No %s are specified.' % kind)
     else:
         logger.user_message('%s are: ' % kind.title())

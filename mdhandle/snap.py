@@ -155,7 +155,6 @@ class Snap(object):
 
         # Must be done after setting self.writer
         self.set_active_dataset(dataset_name, create_new=is_new_data)
-        self.gather_data()
 
     def __repr__(self):
         """

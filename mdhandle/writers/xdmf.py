@@ -477,9 +477,9 @@ class XDMFWriter(object):
                         </DataItem>
                     </Attribute>"""
         dtype = dtype.lower()
-        if 'int' in dtype == 0:
+        if 'int' in dtype:
             dtype = 'Int'
-        elif 'float' in dtype == 0:
+        elif 'float' in dtype:
             dtype = 'Float'
         else:
             self.logger.error('Invalid data type submitted. \
@@ -547,9 +547,9 @@ class XDMFWriter(object):
                         </DataItem>
                     </Attribute>"""
         dtype = dtype.lower()
-        if 'int' in dtype == 0:
+        if 'int' in dtype:
             dtype = 'Int'
-        elif 'float' in dtype == 0:
+        elif 'float' in dtype:
             dtype = 'Float'
         else:
             self.logger.error('Invalid data type submitted. \
@@ -627,9 +627,9 @@ class XDMFWriter(object):
                         </DataItem>
                     </Attribute>"""
         dtype = dtype.lower()
-        if 'int' in dtype == 0:
+        if 'int' in dtype:
             dtype = 'Int'
-        elif 'float' in dtype == 0:
+        elif 'float' in dtype:
             dtype = 'Float'
         else:
             self.logger.error('Invalid data type submitted. \
