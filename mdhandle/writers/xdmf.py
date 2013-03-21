@@ -24,6 +24,8 @@ Creates summary ``.xmf`` files for temporal collection of snapshots
 # TODO: Wrapper around file opening to keep count of the number of open files.
 # TODO: Migrate xmf scalar, vector and tensor to just wrap xmf_block_attribute
 
+# TODO: Add function to check if file is open before write, OR handle file is closed exceptions gracefully.
+
 #----------------------------------------------------------------------------
 
 import os
@@ -394,7 +396,6 @@ class XDMFWriter(object):
         XML = """
             </Grid>"""
         self._xmf.write(XML)
-        self._xmf.close()
 
     def xmf_scalar_attribute(self, name, dtype, location, length):
         """

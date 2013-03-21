@@ -20,12 +20,12 @@ import sys
 
 # ----------------------------------------------------------------------------
 
+# TODO: Add block averaging class or function.
 
 #=============================================================================
 
-
 def main(argv=None):
-    pass
+    pass    
 
 if __name__ == "__main__":
     sys.exit(main())

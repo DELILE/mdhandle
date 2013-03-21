@@ -13,6 +13,7 @@ Produces output which is suited to interactive operation at the console.
 # TODO: Prepend time and context to logged messages.
 
 import sys
+import os
 
 
 class Logger(object):
@@ -66,20 +67,30 @@ class Logger(object):
         msg : string
 
         """
-        # TODO: Method tos martly breakup text from msg into 80 char wide blobs
+        # TODO: Method to smartly breakup text from msg into 80 char wide blobs
         print('\n' + '#'*self.len_wrapper)
         print('\t %s' % msg)
         print('#'*self.len_wrapper)
 
-    def completion_msg(self, msg):
+    def completion_msg(self, msg, speak=False):
         """
         Standard format for completion message.
 
         Parameters
         ----------
         msg : string
+        speak : boolean
+            If ``True``, calls system to say message.
 
         """
+        if speak is True and sys.platform == 'darwin':
+            # Platform dependent: OS X only
+            os.system('say "%s"' % msg)
+        else:
+            # Other platforms
+            print('Speak option is not available outside OS X')
+            print('Completion message will be printed but not spoken.')
+
         self.procedure_banner(msg)
 
     def user_message(self, msg):
@@ -93,7 +104,7 @@ class Logger(object):
         """
         print('+ %s' % msg)
 
-    def request(self, msg='', input_type='raw'):
+    def request(self, msg='', input_type='raw', speak=True):
         """
         Used for printing user requests and questions.
         
@@ -106,15 +117,20 @@ class Logger(object):
             String providing context for request to user.
         input_type : string, {'raw', 'input'}, [default='raw']
            Selects the type of function used for catching user input.
+        speak : boolean
+            If ``True``, calls system to speak request.
 
         """
+        if speak is True:
+            # TODO: Platform dependent: OS X only
+            os.system('say "%s"' % msg)
+        
         if input_type == 'raw':
             return raw_input('>> %s: ' % msg)
         elif input_type == 'input':
             return input('>> %s: ' % msg)
         else:
             self.error('@ Input type %s does not exist' % input_type)
-
 
     def bad_input(self, msg):
         """

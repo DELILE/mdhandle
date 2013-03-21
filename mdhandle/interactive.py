@@ -7,10 +7,12 @@ Enables ipython interaction for from automated scripts and other routines.
 
 Calling :func:`interactive.launch_ipshell` will launch iPython as a subshell.
 
+Note: This module may be out of date due to changes in IPython.
+
 TODO:
     - Add function to handle detecting if it is iPython. 
     - Modify iPython shell prompt so clear when in newly launched iPython
-
+    
 **References**:
 
 * http://ipython.org/ipython-doc/dev/interactive/reference.html#embedding-ipython
