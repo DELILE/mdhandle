@@ -2,13 +2,16 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
+
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>mdhandle.properties.snap_properties &mdash; mdhandle v0.9a documentation</title>
+    <title>mdhandle.properties.snap_properties &mdash; mdhandle 0.9a documentation</title>
+    
     <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../../',
@@ -21,7 +24,7 @@
     <script type="text/javascript" src="../../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../../_static/doctools.js"></script>
-    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="top" title="mdhandle 0.9a documentation" href="../../../index.html" />
     <link rel="up" title="mdhandle.properties" href="../properties.html" /> 
   </head>
   <body>
@@ -37,7 +40,7 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li>
           <li><a href="../properties.html" accesskey="U">mdhandle.properties</a> &raquo;</li> 
       </ul>
@@ -68,7 +71,8 @@
 
 <span class="c"># TODO: Consider refactoring into Snap module.</span>
 <span class="c"># TODO: Add optional mass weighting throughout.</span>
-<span class="c"># TODO: Add function to add new calculations</span>
+<span class="c"># TODO: Add function to add new calculations  </span>
+<span class="c"># TODO: register if snap selections change between calcultions.</span>
 
 <span class="c"># -----------------------------------------------------------------------------</span>
 
@@ -143,7 +147,7 @@
 <span class="sd">            Units should be consistent with snap units.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">volume</span> <span class="o">=</span> <span class="n">volume</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">volume</span> <span class="o">=</span> <span class="nb">float</span><span class="p">(</span><span class="n">volume</span><span class="p">)</span>
 </div>
 <div class="viewcode-block" id="SnapProperties.get_volume_density"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.snap_properties.SnapProperties.get_volume_density">[docs]</a>    <span class="k">def</span> <span class="nf">get_volume_density</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">prop_name</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -234,8 +238,8 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">count</span>
 </div>
 <div class="viewcode-block" id="SnapProperties.ke_total"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.snap_properties.SnapProperties.ke_total">[docs]</a>    <span class="k">def</span> <span class="nf">ke_total</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">from_velocity</span><span class="o">=</span><span class="bp">False</span><span class="p">,</span> <span class="n">ke_name</span><span class="o">=</span><span class="s">&#39;ke&#39;</span><span class="p">,</span>
-                                       <span class="n">velocity_name</span><span class="o">=</span><span class="s">&#39;velocity&#39;</span><span class="p">,</span>
-                                       <span class="n">mass_name</span><span class="o">=</span><span class="s">&#39;mass&#39;</span><span class="p">):</span>
+                                            <span class="n">velocity_name</span><span class="o">=</span><span class="s">&#39;velocity&#39;</span><span class="p">,</span>
+                                            <span class="n">mass_name</span><span class="o">=</span><span class="s">&#39;mass&#39;</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Total kinetic energy in snap.</span>
 
@@ -263,7 +267,7 @@
 
             <span class="k">if</span> <span class="n">ke_name</span> <span class="ow">not</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">col_mapping</span><span class="p">:</span>
                 <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span>
-                              <span class="s">&#39;Kinetic energy not in snapshot.using velocity.&#39;</span><span class="p">)</span>
+                             <span class="s">&#39;Kinetic energy not in snapshot. Using velocity.&#39;</span><span class="p">)</span>
 
             <span class="n">u</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;units&#39;</span><span class="p">]</span>
             <span class="n">units_factor</span> <span class="o">=</span> <span class="n">units</span><span class="o">.</span><span class="n">MASS</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">*</span><span class="n">units</span><span class="o">.</span><span class="n">VELOCITY</span><span class="p">[</span><span class="n">u</span><span class="p">]</span><span class="o">**</span><span class="mi">2</span> <span class="o">/</span> <span class="n">units</span><span class="o">.</span><span class="n">ENERGY</span><span class="p">[</span><span class="n">u</span><span class="p">]</span>
@@ -406,9 +410,18 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">pressure</span> <span class="o">=</span> <span class="o">-</span><span class="p">(</span><span class="mf">1.</span><span class="o">/</span><span class="mf">3.</span><span class="p">)</span><span class="o">*</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">stress</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">stress</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span><span class="o">+</span><span class="bp">self</span><span class="o">.</span><span class="n">stress</span><span class="p">[</span><span class="mi">5</span><span class="p">])</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">pressure</span>
 </div>
-<div class="viewcode-block" id="SnapProperties.com_pos_vel"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.snap_properties.SnapProperties.com_pos_vel">[docs]</a>    <span class="k">def</span> <span class="nf">com_pos_vel</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="SnapProperties.com_pos_vel"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.snap_properties.SnapProperties.com_pos_vel">[docs]</a>    <span class="k">def</span> <span class="nf">com_pos_vel</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weight</span><span class="o">=</span><span class="s">&#39;mass&#39;</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Calculates the position and centre of mass (CoM) of snap.</span>
+<span class="sd">        </span>
+<span class="sd">        Atomic position can be weighted by mass or by any other atomwise</span>
+<span class="sd">        scalar.</span>
+
+<span class="sd">        Parameters</span>
+<span class="sd">        -----------</span>
+<span class="sd">        weight : string</span>
+<span class="sd">            Name of scalar used to weigh atom positions in calculation of </span>
+<span class="sd">            centre of mass. [default=&#39;mass&#39;]</span>
 
 <span class="sd">        Returns</span>
 <span class="sd">        -------</span>
@@ -418,16 +431,25 @@
 <span class="sd">            Snap centre of mass velocity.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s">&#39;mass&#39;</span><span class="p">):</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">mass_total</span><span class="p">()</span>
+        <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">weight</span><span class="p">):</span>
+            <span class="k">if</span> <span class="n">weight</span> <span class="o">==</span> <span class="s">&#39;mass&#39;</span><span class="p">:</span>
+                <span class="n">weighting_total</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass_total</span><span class="p">()</span>
+            <span class="k">else</span><span class="p">:</span>
+                <span class="k">if</span> <span class="n">weight</span> <span class="ow">in</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;col_mapping&#39;</span><span class="p">]:</span>
+                    <span class="n">weighting_total</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">other_total</span><span class="p">(</span><span class="n">weight</span><span class="p">)</span>
+                <span class="k">else</span><span class="p">:</span>
+                    <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Weighting scalar </span><span class="si">%s</span><span class="s"> is not present&#39;</span> <span class="o">%</span> <span class="n">weight</span><span class="p">)</span>
+                    <span class="k">raise</span> <span class="ne">Exception</span>
 
         <span class="n">xyz</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">((</span><span class="s">&#39;x&#39;</span><span class="p">,</span> <span class="s">&#39;y&#39;</span><span class="p">,</span> <span class="s">&#39;z&#39;</span><span class="p">))</span>
-        <span class="n">mass</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="s">&#39;mass&#39;</span><span class="p">)</span>
+        <span class="n">weighting_scalar</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="n">weight</span><span class="p">)</span>
         <span class="n">atom_vel</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_vector</span><span class="p">((</span><span class="s">&#39;vx&#39;</span><span class="p">,</span> <span class="s">&#39;vy&#39;</span><span class="p">,</span> <span class="s">&#39;vz&#39;</span><span class="p">))</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">com</span> <span class="o">=</span> <span class="p">(</span><span class="n">xyz</span><span class="o">.</span><span class="n">T</span><span class="o">*</span><span class="n">mass</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">com_velocity</span> <span class="o">=</span> <span class="p">((</span><span class="n">atom_vel</span><span class="o">.</span><span class="n">T</span><span class="o">*</span><span class="n">mass</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span> <span class="o">/</span> <span class="bp">self</span><span class="o">.</span><span class="n">mass</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">com</span> <span class="o">=</span> <span class="p">(</span><span class="n">xyz</span><span class="o">.</span><span class="n">T</span><span class="o">*</span><span class="n">weighting_scalar</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span> <span class="o">/</span> <span class="n">weighting_total</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">com_velocity</span> <span class="o">=</span> <span class="p">((</span><span class="n">atom_vel</span><span class="o">.</span><span class="n">T</span><span class="o">*</span><span class="n">weighting_scalar</span><span class="o">.</span><span class="n">T</span><span class="p">)</span><span class="o">.</span><span class="n">T</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span><span class="o">=</span><span class="mi">0</span><span class="p">))</span> \
+                                                               <span class="o">/</span> <span class="n">weighting_total</span>
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">com</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">com_velocity</span>
+
 
 
 <span class="c"># =============================================================================</span>
@@ -449,7 +471,7 @@
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="../../../search.html" method="get">
-      <input type="text" name="q" size="18" />
+      <input type="text" name="q" />
       <input type="submit" value="Go" />
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
@@ -475,14 +497,14 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li>
           <li><a href="../properties.html" >mdhandle.properties</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
         &copy; Copyright 2011, Dan Lussier, University of Oxford.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.2.
     </div>
   </body>
 </html>

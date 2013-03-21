@@ -2,13 +2,16 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
+
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>mdhandle.writers.xdmf &mdash; mdhandle v0.9a documentation</title>
+    <title>mdhandle.writers.xdmf &mdash; mdhandle 0.9a documentation</title>
+    
     <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../../',
@@ -21,7 +24,7 @@
     <script type="text/javascript" src="../../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../../_static/doctools.js"></script>
-    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="top" title="mdhandle 0.9a documentation" href="../../../index.html" />
     <link rel="up" title="Module code" href="../../index.html" /> 
   </head>
   <body>
@@ -37,7 +40,7 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" accesskey="U">Module code</a> &raquo;</li> 
       </ul>
     </div>  
@@ -73,6 +76,8 @@
 <span class="c">#       could be used)</span>
 <span class="c"># TODO: Wrapper around file opening to keep count of the number of open files.</span>
 <span class="c"># TODO: Migrate xmf scalar, vector and tensor to just wrap xmf_block_attribute</span>
+
+<span class="c"># TODO: Add function to check if file is open before write, OR handle file is closed exceptions gracefully.</span>
 
 <span class="c">#----------------------------------------------------------------------------</span>
 
@@ -338,25 +343,19 @@
             <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">completion_msg</span><span class="p">(</span><span class="s">&#39;Wrote metadata to </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> 
                                                 <span class="bp">self</span><span class="o">.</span><span class="n">xmf_snap_name</span><span class="p">())</span>
 </div>
-<div class="viewcode-block" id="XDMFWriter.xmf_grid_init"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_grid_init">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_grid_init</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">grid_name</span><span class="p">,</span> <span class="n">timestep</span><span class="p">):</span>
+<div class="viewcode-block" id="XDMFWriter.xmf_grid_init"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_grid_init">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_grid_init</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Writes initial generic XML for both atom and gridded data</span>
 <span class="sd">        to ``.xmf`` file.</span>
 
-<span class="sd">        Parameters</span>
-<span class="sd">        -----------</span>
-<span class="sd">        grid_name : string</span>
-<span class="sd">            Name for gridded dataset.</span>
-<span class="sd">            Usually snap dataset name.</span>
-<span class="sd">        timestep : int</span>
-<span class="sd">            Timestep for gridded dataset (e.g. 101000).</span>
-
 <span class="sd">        &quot;&quot;&quot;</span>
-
+        <span class="n">grid_name</span> <span class="o">=</span> <span class="s">&#39;</span><span class="si">%s</span><span class="s">-</span><span class="si">%s</span><span class="s">-</span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;sim_name&#39;</span><span class="p">],</span>
+                                  <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">],</span>
+                                  <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">)</span>
         <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
 <span class="s">            &lt;Grid Time=&quot;XXX_TIME_XXX&quot; Name=&quot;XXX_NAME_XXX&quot; GridType=&quot;Uniform&quot;&gt;</span>
 <span class="s">                &lt;Time Value=&quot;XXX_TIME_XXX&quot; /&gt;&quot;&quot;&quot;</span>
-        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_TIME_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">timestep</span><span class="p">))</span>
+        <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_TIME_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;time&#39;</span><span class="p">]))</span>
         <span class="n">XML</span> <span class="o">=</span> <span class="n">XML</span><span class="o">.</span><span class="n">replace</span><span class="p">(</span><span class="s">&quot;XXX_NAME_XXX&quot;</span><span class="p">,</span> <span class="nb">str</span><span class="p">(</span><span class="n">grid_name</span><span class="p">))</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
 </div>
@@ -450,7 +449,6 @@
         <span class="n">XML</span> <span class="o">=</span> <span class="s">&quot;&quot;&quot;</span>
 <span class="s">            &lt;/Grid&gt;&quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">write</span><span class="p">(</span><span class="n">XML</span><span class="p">)</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_xmf</span><span class="o">.</span><span class="n">close</span><span class="p">()</span>
 </div>
 <div class="viewcode-block" id="XDMFWriter.xmf_scalar_attribute"><a class="viewcode-back" href="../../../reference.html#mdhandle.writers.xdmf.XDMFWriter.xmf_scalar_attribute">[docs]</a>    <span class="k">def</span> <span class="nf">xmf_scalar_attribute</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> <span class="n">location</span><span class="p">,</span> <span class="n">length</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -790,8 +788,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">xmf_new</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">xmf_grid_init</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">,</span>
-                                                        <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;time&#39;</span><span class="p">])</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">xmf_grid_init</span><span class="p">()</span>
 
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;atoms&#39;</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">xmf_grid_atoms</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">])</span>
@@ -1267,7 +1264,7 @@
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="../../../search.html" method="get">
-      <input type="text" name="q" size="18" />
+      <input type="text" name="q" />
       <input type="submit" value="Go" />
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
@@ -1293,13 +1290,13 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
         &copy; Copyright 2011, Dan Lussier, University of Oxford.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.2.
     </div>
   </body>
 </html>

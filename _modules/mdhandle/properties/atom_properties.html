@@ -2,13 +2,16 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
+
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>mdhandle.properties.atom_properties &mdash; mdhandle v0.9a documentation</title>
+    <title>mdhandle.properties.atom_properties &mdash; mdhandle 0.9a documentation</title>
+    
     <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../../',
@@ -21,7 +24,7 @@
     <script type="text/javascript" src="../../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../../_static/doctools.js"></script>
-    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="top" title="mdhandle 0.9a documentation" href="../../../index.html" />
     <link rel="up" title="mdhandle.properties" href="../properties.html" /> 
   </head>
   <body>
@@ -37,7 +40,7 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li>
           <li><a href="../properties.html" accesskey="U">mdhandle.properties</a> &raquo;</li> 
       </ul>
@@ -79,6 +82,7 @@
 <span class="c">#       new calculation implemenation.</span>
 <span class="c"># TODO: Add additional class like NonLocal to handle other unit types</span>
 <span class="c">#       - or add unit factors like in mdhandle.properties.snap_properties</span>
+
 
 <span class="c"># -----------------------------------------------------------------------------</span>
 
@@ -615,7 +619,7 @@
 <span class="sd">        Calculates the distance (magnitude and vector) between ``atom_id`` and</span>
 <span class="sd">        other atoms in the snap.</span>
 
-<span class="sd">        Calculated distance is limited by :attr:`NonLammps.cutoff`.</span>
+<span class="sd">        Calculated distance is limited by :attr:`NonLocalLammps.cutoff`.</span>
 
 <span class="sd">        Resuts are stored in :attr:`NonLocal.diff` and</span>
 <span class="sd">        :attr:`NonLocal.diff_mag`.</span>
@@ -710,12 +714,12 @@
 
 
 <span class="c"># TODO: Use overt Python calls to LAMMPS library rather than input file.</span>
-<span class="c">#           - e.g. calculations defined by NonLammps method not input file</span>
+<span class="c">#           - e.g. calculations defined by NonLocalLammps method not input file</span>
 <span class="c"># TODO: Add call to generate LAMMPS data file from snap object at run time.</span>
 <span class="c"># TODO: Extend to other types of properties fix, atom properties (velocity)</span>
 
 </div></div>
-<div class="viewcode-block" id="NonLammps"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLammps">[docs]</a><span class="k">class</span> <span class="nc">NonLammps</span><span class="p">(</span><span class="n">AtomCalc</span><span class="p">):</span>
+<div class="viewcode-block" id="NonLocalLammps"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocalLammps">[docs]</a><span class="k">class</span> <span class="nc">NonLocalLammps</span><span class="p">(</span><span class="n">AtomCalc</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Class used for calculating non-local properties using a Python wrapped</span>
 <span class="sd">    LAMMPS library to perform the calculation.</span>
@@ -751,7 +755,7 @@
 <span class="sd">        which must match the name of LAMMPS compute.</span>
 
 <span class="sd">        To add additional calculaion types must add additional item</span>
-<span class="sd">        using :meth:`NonLammps.add_new_calc` method.</span>
+<span class="sd">        using :meth:`NonLocalLammps.add_new_calc` method.</span>
 <span class="sd">    lammps_log : string, [default=&#39;lammps_mdhandle.log&#39;]</span>
 <span class="sd">        Log file name for LAMMPS run.</span>
 
@@ -764,9 +768,9 @@
 <span class="sd">    cutoff : float</span>
 <span class="sd">        Cutoff associated with interatomic interaction.</span>
 <span class="sd">    results : dict</span>
-<span class="sd">        All results from calculations in :attr:`NonLammps.to_calc`</span>
+<span class="sd">        All results from calculations in :attr:`NonLocalLammps.to_calc`</span>
 <span class="sd">        are stored in `dict` organized by name.  Results also stored in</span>
-<span class="sd">        attributes of :class:`NonLammps`.</span>
+<span class="sd">        attributes of :class:`NonLocalLammps`.</span>
 
 <span class="sd">    Methods</span>
 <span class="sd">    --------</span>
@@ -774,17 +778,17 @@
 <span class="sd">        Add metadata for new calculation function.</span>
 <span class="sd">        Overrides completely :meth:`AtomCalc.add_new_calc`.</span>
 <span class="sd">    run()</span>
-<span class="sd">        Runs all calculations stored in :attr:`NonLammps.to_calc`.</span>
+<span class="sd">        Runs all calculations stored in :attr:`NonLocalLammps.to_calc`.</span>
 
 <span class="sd">    &quot;&quot;&quot;</span>
 
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">input_fn</span><span class="p">,</span> <span class="n">cutoff</span><span class="p">,</span> <span class="n">calcs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">wrap</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
                                        <span class="n">lammps_log</span><span class="o">=</span><span class="s">&#39;lammps_mdhandle.log&#39;</span><span class="p">):</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">NonLammps</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="p">,</span> <span class="n">wrap</span><span class="p">)</span>
+        <span class="nb">super</span><span class="p">(</span><span class="n">NonLocalLammps</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="p">,</span> <span class="n">wrap</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">input_fn</span> <span class="o">=</span> <span class="n">input_fn</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">lammps_log</span> <span class="o">=</span> <span class="n">lammps_log</span>
 
-        <span class="c"># Not currently used within NonLammps obj</span>
+        <span class="c"># Not currently used within NonLocalLammps obj</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">cutoff</span> <span class="o">=</span> <span class="n">cutoff</span>
 
         <span class="c"># Default calculations</span>
@@ -793,18 +797,18 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;force&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;vectors&#39;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="s">&#39;stress&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;symm_tensors&#39;</span><span class="p">)</span>
 
-        <span class="c"># must be called before NonLammps.run(...)</span>
+        <span class="c"># must be called before NonLocalLammps.run(...)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">setup_calculations</span><span class="p">()</span>
 
-<div class="viewcode-block" id="NonLammps.add_new_calc"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLammps.add_new_calc">[docs]</a>    <span class="k">def</span> <span class="nf">add_new_calc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;scalars&#39;</span><span class="p">,</span>
+<div class="viewcode-block" id="NonLocalLammps.add_new_calc"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocalLammps.add_new_calc">[docs]</a>    <span class="k">def</span> <span class="nf">add_new_calc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;scalars&#39;</span><span class="p">,</span>
                                                 <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Adds information about the output of a new calculation type beyond the</span>
 <span class="sd">        default set: ``[&#39;coord&#39;, &#39;epair&#39;, &#39;force&#39;, &#39;stress&#39;]``</span>
 
-<span class="sd">        For :class:`NonLammps`, new calculations are defined within the</span>
-<span class="sd">        LAMMPS data file rather than via a NonLammps method.  Therefore, the</span>
-<span class="sd">        name must match the name of the LAMMPS compute.</span>
+<span class="sd">        For :class:`NonLocalLammps`, new calculations are defined within the</span>
+<span class="sd">        LAMMPS data file rather than via a NonLocalLammps method.  Therefore,</span>
+<span class="sd">        the name must match the name of the LAMMPS compute.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        -----------</span>
@@ -820,18 +824,18 @@
 <span class="sd">            :class:`AtomCalc`, only `&#39;Node&#39;` is relevant.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="nb">super</span><span class="p">(</span><span class="n">NonLammps</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> 
+        <span class="nb">super</span><span class="p">(</span><span class="n">NonLocalLammps</span><span class="p">,</span> <span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">add_new_calc</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">dtype</span><span class="p">,</span> 
                                                   <span class="n">collection_type</span><span class="p">,</span> <span class="n">location</span><span class="p">)</span>
         <span class="n">logger</span><span class="o">.</span><span class="n">warning</span><span class="p">(</span><span class="s">&#39;Add new calculation </span><span class="si">%s</span><span class="s"> to LAMMPS input file&#39;</span> <span class="o">%</span> <span class="n">name</span><span class="p">)</span>
 </div>
-<div class="viewcode-block" id="NonLammps.run"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLammps.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+<div class="viewcode-block" id="NonLocalLammps.run"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.atom_properties.NonLocalLammps.run">[docs]</a>    <span class="k">def</span> <span class="nf">run</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Launches LAMMPS based calculation defined by requested calculations and</span>
-<span class="sd">        the LAMMPS input file (:attr:`NonLammps.input_fn`).</span>
+<span class="sd">        the LAMMPS input file (:attr:`NonLocalLammps.input_fn`).</span>
 
-<span class="sd">        Result of calculations stored in :attr:`NonLammps.results` and</span>
-<span class="sd">        :class:`NonLammps` attribute with name corresponding</span>
-<span class="sd">        to the calculation name stored in :attr:`NonLammps.calcs`.</span>
+<span class="sd">        Result of calculations stored in :attr:`NonLocalLammps.results` and</span>
+<span class="sd">        :class:`NonLocalLammps` attribute with name corresponding</span>
+<span class="sd">        to the calculation name stored in :attr:`NonLocalLammps.calcs`.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
 
@@ -869,7 +873,7 @@
 
                 <span class="n">tmp</span> <span class="o">=</span> <span class="n">lmp</span><span class="o">.</span><span class="n">lazy_extract_compute</span><span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="n">output_type</span><span class="p">)</span>
 
-                <span class="c"># Saving output to NonLammps.results.</span>
+                <span class="c"># Saving output to NonLocalLammps.results.</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">name</span><span class="p">]</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ctypeslib</span><span class="o">.</span><span class="n">as_array</span><span class="p">(</span><span class="n">tmp</span><span class="p">)</span><span class="o">.</span>\
                                         <span class="n">reshape</span><span class="p">((</span><span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">],</span> 
                                                             <span class="n">PROP_SIZE</span><span class="p">[</span><span class="n">name</span><span class="p">]))</span>
@@ -979,7 +983,7 @@
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="../../../search.html" method="get">
-      <input type="text" name="q" size="18" />
+      <input type="text" name="q" />
       <input type="submit" value="Go" />
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
@@ -1005,14 +1009,14 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li>
           <li><a href="../properties.html" >mdhandle.properties</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
         &copy; Copyright 2011, Dan Lussier, University of Oxford.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.2.
     </div>
   </body>
 </html>

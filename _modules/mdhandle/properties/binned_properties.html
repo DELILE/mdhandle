@@ -2,13 +2,16 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
+
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>mdhandle.properties.binned_properties &mdash; mdhandle v0.9a documentation</title>
+    <title>mdhandle.properties.binned_properties &mdash; mdhandle 0.9a documentation</title>
+    
     <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../../',
@@ -21,7 +24,7 @@
     <script type="text/javascript" src="../../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../../_static/doctools.js"></script>
-    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="top" title="mdhandle 0.9a documentation" href="../../../index.html" />
     <link rel="up" title="mdhandle.properties" href="../properties.html" /> 
   </head>
   <body>
@@ -37,7 +40,7 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li>
           <li><a href="../properties.html" accesskey="U">mdhandle.properties</a> &raquo;</li> 
       </ul>
@@ -55,6 +58,9 @@
 <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">Calculate average quantities on grid from atomiwise values.</span>
 <span class="sd">(e.g. local streaming velocity, local temperature)</span>
+
+<span class="sd">**Credits**: Inspiration for binning algorithm from binning module in ``mol_mod`` module in ``MD-Tracks`` package</span>
+
 
 <span class="sd">&quot;&quot;&quot;</span>
 
@@ -139,8 +145,8 @@
 <span class="sd">        If ``calcs is None``, then all existing calculations are performed.</span>
 <span class="sd">        Existing calculations :</span>
 <span class="sd">            ``[&#39;count&#39;, &#39;num_density&#39;, &#39;mass&#39;, &#39;mass_density&#39;,``</span>
-<span class="sd">            ``&#39;epair_specific&#39;, &#39;coord_specific&#39;, &#39;velocity&#39;,``</span>
-<span class="sd">            ``&#39;ke_specific&#39;, &#39;force_specific&#39;, &#39;temp&#39;, &#39;stress&#39;]``</span>
+<span class="sd">            ``&#39;epair_count&#39;, &#39;coord_count&#39;, &#39;velocity&#39;,``</span>
+<span class="sd">            ``&#39;ke_count&#39;, &#39;force_count&#39;, &#39;temp&#39;, &#39;stress&#39;]``</span>
 <span class="sd">    wrap : boolean, [default=True]</span>
 <span class="sd">        If ``True``, coordinates in active data set in snap are</span>
 <span class="sd">        wrapped to the central simulation cell subject to PBC.</span>
@@ -211,6 +217,8 @@
 
     <span class="k">def</span> <span class="nf">__init__</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span> <span class="n">wrap</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span> <span class="n">use_selection</span><span class="o">=</span><span class="bp">True</span><span class="p">,</span>
                                                     <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">):</span>
+
+        <span class="n">logger</span><span class="o">.</span><span class="n">user_message</span><span class="p">(</span><span class="s">&#39;Using abstract ABC Grid __init__() function&#39;</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">snap</span> <span class="o">=</span> <span class="n">snap</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">gather_data</span><span class="p">()</span>
 
@@ -314,7 +322,8 @@
             <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Mapping function </span><span class="si">%s</span><span class="s"> does not exist&#39;</span> <span class="o">%</span> <span class="n">name</span><span class="p">)</span>
 </div>
 <div class="viewcode-block" id="Grid.add_new_calc"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid.add_new_calc">[docs]</a>    <span class="k">def</span> <span class="nf">add_new_calc</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">calc_name</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="s">&#39;float&#39;</span><span class="p">,</span> <span class="n">collection_type</span><span class="o">=</span><span class="s">&#39;scalars&#39;</span><span class="p">,</span>
-                                      <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">,</span> <span class="n">atomwise_name</span><span class="o">=</span><span class="bp">None</span><span class="p">):</span>
+                                      <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">,</span> <span class="n">atomwise_name</span><span class="o">=</span><span class="bp">None</span><span class="p">,</span>\
+                                      <span class="n">run_setup</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Adds metadata about the output of a new calculation type beyond the</span>
 <span class="sd">        default set.</span>
@@ -340,6 +349,10 @@
 <span class="sd">            :attr:`Grid.snap`. Each ``dict`` entry is formatted as:</span>
 <span class="sd">        </span>
 <span class="sd">            ``&#39;identifying_name&#39;:&#39;name_in_snap&#39;``</span>
+<span class="sd">        run_setup : boolean, [default=False]</span>
+<span class="sd">            Runs :meth:`Grid.setup_calculations` after new calculationi is</span>
+<span class="sd">            added.  Not recommended for use during initial setup such as</span>
+<span class="sd">            in grid __init__.</span>
 <span class="sd">        </span>
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">dtype</span> <span class="o">=</span> <span class="n">dtype</span><span class="o">.</span><span class="n">lower</span><span class="p">()</span>
@@ -362,7 +375,9 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">calc_name</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="s">&#39;dtype&#39;</span><span class="p">:</span> <span class="n">dtype</span><span class="p">,</span> <span class="s">&#39;location&#39;</span><span class="p">:</span> <span class="n">location</span><span class="p">,</span>
                                       <span class="s">&#39;type&#39;</span><span class="p">:</span> <span class="n">collection_type</span><span class="p">,</span>
                                       <span class="s">&#39;atomwise_name&#39;</span><span class="p">:</span> <span class="n">atomwise_name</span><span class="p">}</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">setup_calculations</span><span class="p">()</span>
+
+        <span class="k">if</span> <span class="n">run_setup</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">setup_calculations</span><span class="p">()</span>
 </div>
 <div class="viewcode-block" id="Grid.setup_calculations"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid.setup_calculations">[docs]</a>    <span class="k">def</span> <span class="nf">setup_calculations</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -386,13 +401,13 @@
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">to_loop</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
 
-            <span class="k">if</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;scalars&#39;</span><span class="p">:</span>
+            <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;scalars&#39;</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">scalars</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-            <span class="k">elif</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;vectors&#39;</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;vectors&#39;</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">vectors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-            <span class="k">elif</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;tensors&#39;</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;tensors&#39;</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
-            <span class="k">elif</span> <span class="n">i</span><span class="p">[</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;symm_tensors&#39;</span><span class="p">:</span>
+            <span class="k">elif</span> <span class="bp">self</span><span class="o">.</span><span class="n">to_calc</span><span class="p">[</span><span class="n">i</span><span class="p">][</span><span class="s">&#39;type&#39;</span><span class="p">]</span> <span class="o">==</span> <span class="s">&#39;symm_tensors&#39;</span><span class="p">:</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="n">i</span><span class="p">]</span>
 
         <span class="c"># Human readable.</span>
@@ -449,10 +464,10 @@
 <span class="sd">           This method must be called before :meth:`Grid.run_calc`.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_once</span><span class="p">[</span><span class="s">&#39;run_mapping&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+        <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">_run_once</span><span class="p">[</span><span class="s">&#39;run_binning&#39;</span><span class="p">]</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
             <span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Grid calculation cannot be run more than once.&#39;</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
-            <span class="bp">self</span><span class="o">.</span><span class="n">_run_once</span><span class="p">[</span><span class="s">&#39;run_mapping&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">True</span>
+            <span class="bp">self</span><span class="o">.</span><span class="n">_run_once</span><span class="p">[</span><span class="s">&#39;run_binning&#39;</span><span class="p">]</span> <span class="o">=</span> <span class="bp">True</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">mapping_func</span><span class="p">(</span><span class="o">*</span><span class="n">args</span><span class="p">,</span> <span class="o">**</span><span class="n">kwargs</span><span class="p">)</span>
 </div>
 <div class="viewcode-block" id="Grid.run_calc"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid.run_calc">[docs]</a>    <span class="k">def</span> <span class="nf">run_calc</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -502,7 +517,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">for</span> <span class="n">req</span> <span class="ow">in</span> <span class="n">list_reqs</span><span class="p">:</span>
             <span class="k">if</span> <span class="ow">not</span> <span class="nb">hasattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">):</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">req</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s">&#39;calc_&#39;</span> <span class="o">+</span> <span class="n">req</span><span class="p">)()</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">req</span><span class="p">]</span> <span class="o">=</span> <span class="nb">getattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="s">&#39;_calc_&#39;</span> <span class="o">+</span> <span class="n">req</span><span class="p">)()</span>
                 <span class="nb">setattr</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">req</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">results</span><span class="p">[</span><span class="n">req</span><span class="p">])</span>
             <span class="k">else</span><span class="p">:</span>
                 <span class="k">continue</span>
@@ -529,7 +544,6 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="c"># Defining helper function to get atom values</span>
         <span class="c"># back from grid_value.</span>
-        <span class="nd">@np.vectorize</span>
         <span class="k">def</span> <span class="nf">get_total_weighting</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">weights</span><span class="p">):</span>
             <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">            Calculates the weighted average of grid values</span>
@@ -558,13 +572,26 @@
 <span class="sd">            &quot;&quot;&quot;</span>
             <span class="k">if</span> <span class="n">idx</span> <span class="ow">is</span> <span class="ow">not</span> <span class="bp">None</span><span class="p">:</span>
                 <span class="n">total</span> <span class="o">=</span> <span class="n">fsum</span><span class="p">(</span><span class="n">weights</span><span class="p">)</span>
-                <span class="n">prod</span> <span class="o">=</span> <span class="n">fsum</span><span class="p">([</span><span class="n">grid_value</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">*</span><span class="n">w</span> <span class="k">for</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">weights</span><span class="p">)])</span>
+                <span class="n">temp</span> <span class="o">=</span> <span class="p">[</span><span class="n">grid_value</span><span class="p">[</span><span class="n">i</span><span class="p">]</span><span class="o">*</span><span class="n">w</span> <span class="k">for</span> <span class="p">(</span><span class="n">i</span><span class="p">,</span> <span class="n">w</span><span class="p">)</span> <span class="ow">in</span> <span class="nb">zip</span><span class="p">(</span><span class="n">idx</span><span class="p">,</span> <span class="n">weights</span><span class="p">)]</span>
+                                
+                <span class="n">prod</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">temp</span><span class="p">)</span><span class="o">.</span><span class="n">sum</span><span class="p">(</span><span class="n">axis</span> <span class="o">=</span> <span class="mi">0</span><span class="p">)</span>
                 <span class="k">return</span> <span class="n">prod</span> <span class="o">/</span> <span class="n">total</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="k">return</span> <span class="mf">0.0</span>
+                <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">(</span><span class="n">prod</span><span class="o">.</span><span class="n">shape</span><span class="p">)</span>
 
-        <span class="n">atom_value</span> <span class="o">=</span> <span class="n">get_total_weighting</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span>
-                                         <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span>
+        <span class="c"># end get_total_weighting(...)</span>
+        <span class="n">vec_get_total_weighting</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">vectorize</span><span class="p">(</span><span class="n">get_total_weighting</span><span class="p">,</span> 
+                                               <span class="n">otypes</span><span class="o">=</span><span class="p">[</span><span class="n">np</span><span class="o">.</span><span class="n">object</span><span class="p">,])</span>
+        
+        
+        <span class="n">tmp</span> <span class="o">=</span> <span class="n">vec_get_total_weighting</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[:,</span><span class="mi">0</span><span class="p">],</span> 
+                                      <span class="bp">self</span><span class="o">.</span><span class="n">grid_to_atom</span><span class="p">[:,</span><span class="mi">1</span><span class="p">])</span>
+
+        <span class="n">atom_value</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">zeros</span><span class="p">((</span><span class="n">tmp</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span> <span class="n">tmp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]))</span>
+        <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">tmp</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+            <span class="k">for</span> <span class="n">j</span> <span class="ow">in</span> <span class="nb">range</span><span class="p">(</span><span class="n">tmp</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span><span class="o">.</span><span class="n">shape</span><span class="p">[</span><span class="mi">0</span><span class="p">]):</span>
+                <span class="n">atom_value</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span> <span class="o">=</span> <span class="n">tmp</span><span class="p">[</span><span class="n">i</span><span class="p">,</span><span class="n">j</span><span class="p">]</span>
+
         <span class="k">return</span> <span class="n">atom_value</span>
 </div>
 <div class="viewcode-block" id="Grid._sum_from_atom_value"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._sum_from_atom_value">[docs]</a>    <span class="k">def</span> <span class="nf">_sum_from_atom_value</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">atom_value</span><span class="p">):</span>
@@ -632,10 +659,6 @@
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="n">count</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_sum_from_atom_value</span><span class="p">(</span><span class="mf">1.0</span><span class="p">)</span>
-
-        <span class="c"># Call _coverage() and _coverage()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_coverage</span><span class="p">()</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_num_atoms</span><span class="p">()</span>
         <span class="k">return</span> <span class="n">count</span>
 </div>
 <div class="viewcode-block" id="Grid._num_atoms"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.Grid._num_atoms">[docs]</a>    <span class="k">def</span> <span class="nf">_num_atoms</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
@@ -921,7 +944,7 @@
 <span class="sd">            :attr:`Grid.stress` in `Grid.run()`.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">stress_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;stress&#39;</span><span class="p">][</span><span class="s">&#39;atomwise&#39;</span><span class="p">][</span><span class="s">&#39;stress&#39;</span><span class="p">]</span>
+        <span class="n">stress_name</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_all_calcs</span><span class="p">[</span><span class="s">&#39;stress&#39;</span><span class="p">][</span><span class="s">&#39;atomwise_name&#39;</span><span class="p">][</span><span class="s">&#39;stress&#39;</span><span class="p">]</span>
         <span class="n">stress_comps</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">symm_tensors</span><span class="p">[</span><span class="n">stress_name</span><span class="p">][</span><span class="s">&#39;comps&#39;</span><span class="p">]</span>
 
         <span class="n">s</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">snap</span><span class="o">.</span><span class="n">get_symm_tensor</span><span class="p">(</span><span class="n">stress_comps</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="p">(</span><span class="ow">not</span> <span class="bp">self</span><span class="o">.</span><span class="n">use_sel</span><span class="p">))</span>
@@ -1051,12 +1074,9 @@
                              <span class="n">location</span><span class="o">=</span><span class="s">&#39;Node&#39;</span><span class="p">):</span>
 
         <span class="nb">super</span><span class="p">(</span><span class="n">RectGrid</span><span class="p">,</span><span class="bp">self</span><span class="p">)</span><span class="o">.</span><span class="n">__init__</span><span class="p">(</span><span class="n">snap</span><span class="p">,</span> <span class="n">calcs</span><span class="p">,</span> <span class="n">wrap</span><span class="p">,</span> <span class="n">selection</span><span class="p">,</span> <span class="n">location</span><span class="p">)</span>
-
         
         <span class="bp">self</span><span class="o">.</span><span class="n">origin</span> <span class="o">=</span> <span class="n">origin</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span> <span class="o">=</span> <span class="n">grid_spacing</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
-
-        <span class="bp">self</span><span class="o">.</span><span class="n">elem_volume</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">_matrix</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">diag</span><span class="p">(</span><span class="n">axes</span><span class="p">)</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">float</span><span class="p">)</span>
 
@@ -1081,10 +1101,18 @@
         <span class="bp">self</span><span class="o">.</span><span class="n">remainder</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">mod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span> <span class="o">-=</span> <span class="bp">self</span><span class="o">.</span><span class="n">remainder</span>
 
-        <span class="bp">self</span><span class="o">.</span><span class="n">num_elem</span> <span class="o">=</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="mf">1.0</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span> <span class="o">+</span>
-                                                    <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
 
         <span class="bp">self</span><span class="o">.</span><span class="n">set_mapping_function</span><span class="p">(</span><span class="n">mapping</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">setup_calculations</span><span class="p">()</span>
+                      
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">num_elem</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">floor</span><span class="p">(</span><span class="mf">1.0</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">_boxL</span><span class="o">/</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span> <span class="o">+</span>
+                                                      <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="mi">3</span><span class="p">))</span><span class="o">.</span><span class="n">astype</span><span class="p">(</span><span class="n">np</span><span class="o">.</span><span class="n">int</span><span class="p">)</span>
+
+    <span class="nd">@property</span>
+    <span class="k">def</span> <span class="nf">elem_volume</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">np</span><span class="o">.</span><span class="n">prod</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">grid_spacing</span><span class="p">)</span>
 
 <div class="viewcode-block" id="RectGrid.mapping_func"><a class="viewcode-back" href="../../../reference.html#mdhandle.properties.binned_properties.RectGrid.mapping_func">[docs]</a>    <span class="k">def</span> <span class="nf">mapping_func</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -1221,7 +1249,7 @@
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="../../../search.html" method="get">
-      <input type="text" name="q" size="18" />
+      <input type="text" name="q" />
       <input type="submit" value="Go" />
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
@@ -1247,14 +1275,14 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li>
           <li><a href="../properties.html" >mdhandle.properties</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
         &copy; Copyright 2011, Dan Lussier, University of Oxford.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.2.
     </div>
   </body>
 </html>

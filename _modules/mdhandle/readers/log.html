@@ -2,13 +2,16 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
+
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>mdhandle.readers.log &mdash; mdhandle v0.9a documentation</title>
+    <title>mdhandle.readers.log &mdash; mdhandle 0.9a documentation</title>
+    
     <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../../',
@@ -21,7 +24,7 @@
     <script type="text/javascript" src="../../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../../_static/doctools.js"></script>
-    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="top" title="mdhandle 0.9a documentation" href="../../../index.html" />
     <link rel="up" title="mdhandle.readers" href="../readers.html" /> 
   </head>
   <body>
@@ -37,7 +40,7 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li>
           <li><a href="../readers.html" accesskey="U">mdhandle.readers</a> &raquo;</li> 
       </ul>
@@ -60,7 +63,8 @@
 <span class="sd">**Credits** :</span>
 
 <span class="sd">* Uses ``log.py`` from Pizza v19Apr10 for reading LAMMPS log files</span>
-<span class="sd">  (http://www.sandia.gov/~sjplimp/pizza.html).</span>
+<span class="sd">  (http://www.sandia.gov/~sjplimp/pizza.html).  Within :mod:`mdhandle`</span>
+<span class="sd">  it is renamed ``log_pizza.py``.</span>
 
 <span class="sd">&quot;&quot;&quot;</span>
 <span class="c"># TODO: Embed the log data within one or all of HDF files.</span>
@@ -73,7 +77,7 @@
 <span class="kn">import</span> <span class="nn">numpy</span> <span class="kn">as</span> <span class="nn">np</span>
 
 <span class="c"># LAMMPS log class.</span>
-<span class="kn">from</span> <span class="nn">mdhandle.readers.log_pizza</span> <span class="kn">import</span> <span class="n">log</span>
+<span class="kn">from</span> <span class="nn">mdhandle.readers</span> <span class="kn">import</span> <span class="n">log_pizza</span>
 <span class="kn">from</span> <span class="nn">mdhandle.logger</span> <span class="kn">import</span> <span class="n">Logger</span>
 
 <span class="c">#------------------------------------------------------------------------------</span>
@@ -129,7 +133,7 @@
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">log_fn</span> <span class="o">=</span> <span class="n">log_fn</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">_log_pizza</span> <span class="o">=</span> <span class="n">log</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_fn</span><span class="p">)</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">_log_pizza</span> <span class="o">=</span> <span class="n">log_pizza</span><span class="o">.</span><span class="n">log</span><span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">log_fn</span><span class="p">)</span>
 
         <span class="c"># Pulling metadata up into Log(...) object</span>
         <span class="bp">self</span><span class="o">.</span><span class="n">flist</span> <span class="o">=</span> <span class="bp">self</span><span class="o">.</span><span class="n">_log_pizza</span><span class="o">.</span><span class="n">flist</span>
@@ -193,7 +197,7 @@
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="../../../search.html" method="get">
-      <input type="text" name="q" size="18" />
+      <input type="text" name="q" />
       <input type="submit" value="Go" />
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
@@ -219,14 +223,14 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li>
           <li><a href="../readers.html" >mdhandle.readers</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
         &copy; Copyright 2011, Dan Lussier, University of Oxford.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.2.
     </div>
   </body>
 </html>

@@ -2,13 +2,16 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
+
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>mdhandle.properties.selection &mdash; mdhandle v0.9a documentation</title>
+    <title>mdhandle.properties.selection &mdash; mdhandle 0.9a documentation</title>
+    
     <link rel="stylesheet" href="../../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../../_static/pygments.css" type="text/css" />
+    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../../',
@@ -21,7 +24,7 @@
     <script type="text/javascript" src="../../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../../_static/doctools.js"></script>
-    <link rel="top" title="mdhandle v0.9a documentation" href="../../../index.html" />
+    <link rel="top" title="mdhandle 0.9a documentation" href="../../../index.html" />
     <link rel="up" title="mdhandle.properties" href="../properties.html" /> 
   </head>
   <body>
@@ -37,7 +40,7 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li>
           <li><a href="../properties.html" accesskey="U">mdhandle.properties</a> &raquo;</li> 
       </ul>
@@ -139,8 +142,27 @@
         <span class="k">return</span> <span class="bp">self</span><span class="o">.</span><span class="n">masked</span>
 
 <span class="c"># ------------------- Selection Functions -------------------------------------</span>
-
 </div></div>
+<span class="k">def</span> <span class="nf">mask_exists</span><span class="p">(</span><span class="n">mask_array</span><span class="p">):</span>
+    <span class="sd">&quot;&quot;&quot;</span>
+<span class="sd">    Selection function for the case where the mask array already exists</span>
+<span class="sd">    from a previous calculation.</span>
+<span class="sd">    </span>
+<span class="sd">    Parameters</span>
+<span class="sd">    ----------</span>
+<span class="sd">    mask_array : `numpy.ndarray`</span>
+<span class="sd">        Masking array in the correct format for selection.</span>
+<span class="sd">    </span>
+<span class="sd">    Returns</span>
+<span class="sd">    -------</span>
+<span class="sd">    masking_function : callable</span>
+<span class="sd">        Function for selecting liquid atoms.</span>
+<span class="sd">    </span>
+<span class="sd">    &quot;&quot;&quot;</span>
+    <span class="k">def</span> <span class="nf">masking_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
+        <span class="k">return</span> <span class="n">mask_array</span>
+    <span class="k">return</span> <span class="n">masking_function</span>
+
 <span class="k">def</span> <span class="nf">liquid_only</span><span class="p">(</span><span class="n">threshold</span><span class="p">,</span> <span class="n">fluid_atom_type</span><span class="p">,</span> <span class="n">coord_name</span><span class="o">=</span><span class="s">&#39;coord&#39;</span><span class="p">):</span>
     <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">    Selects liquid atoms using coordination number.</span>
@@ -189,7 +211,7 @@
 <span class="sd">        Function for selecting fluid atoms.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="k">def</span> <span class="nf">masking_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
-        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">num_atoms</span><span class="p">,</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
+        <span class="n">mask</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">ones</span><span class="p">(</span><span class="n">s</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;num_atoms&#39;</span><span class="p">],</span> <span class="n">dtype</span><span class="o">=</span><span class="nb">bool</span><span class="p">)</span>
         <span class="n">snap_type</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">get_scalar</span><span class="p">(</span><span class="s">&#39;type&#39;</span><span class="p">,</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
         <span class="k">for</span> <span class="n">i</span> <span class="ow">in</span> <span class="n">fluid_atom_types</span><span class="p">:</span>
             <span class="n">mask</span> <span class="o">*=</span> <span class="p">(</span><span class="n">snap_type</span> <span class="o">==</span> <span class="nb">int</span><span class="p">(</span><span class="n">i</span><span class="p">))</span>
@@ -271,6 +293,10 @@
 <span class="sd">    &quot;&quot;&quot;</span>
     <span class="c"># TODO: Generalize to box that is not aligned to coordinate directions.</span>
 
+    <span class="c"># Converting inputs to Numpy array if not already</span>
+    <span class="n">corner_low</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">corner_low</span><span class="p">)</span>
+    <span class="n">dimensions</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">dimensions</span><span class="p">)</span>
+
     <span class="n">corner_high</span> <span class="o">=</span> <span class="n">corner_low</span> <span class="o">+</span> <span class="n">dimensions</span>
 
     <span class="k">def</span> <span class="nf">masking_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
@@ -305,6 +331,10 @@
 <span class="sd">    masking_function : callable</span>
 <span class="sd">        Function for selecting atoms with coordinates inside 3D sphere.</span>
 <span class="sd">    &quot;&quot;&quot;</span>
+    <span class="c"># Converting input vectors to Numpy array if not already</span>
+    <span class="n">centre</span> <span class="o">=</span> <span class="n">np</span><span class="o">.</span><span class="n">array</span><span class="p">(</span><span class="n">centre</span><span class="p">)</span>
+
+    
     <span class="k">def</span> <span class="nf">masking_function</span><span class="p">(</span><span class="n">s</span><span class="p">):</span>
         <span class="n">xyz</span> <span class="o">=</span> <span class="n">s</span><span class="o">.</span><span class="n">get_vector</span><span class="p">((</span><span class="s">&#39;x&#39;</span><span class="p">,</span> <span class="s">&#39;y&#39;</span><span class="p">,</span> <span class="s">&#39;z&#39;</span><span class="p">),</span> <span class="n">raw_data</span><span class="o">=</span><span class="bp">True</span><span class="p">)</span>
         <span class="n">mask</span> <span class="o">=</span> <span class="n">vectors</span><span class="o">.</span><span class="n">sq_magnitude</span><span class="p">(</span><span class="n">xyz</span><span class="o">-</span><span class="n">centre</span><span class="p">)</span> <span class="o">&lt;</span> <span class="n">radius</span><span class="o">**</span><span class="mi">2</span>
@@ -355,7 +385,7 @@
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="../../../search.html" method="get">
-      <input type="text" name="q" size="18" />
+      <input type="text" name="q" />
       <input type="submit" value="Go" />
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
@@ -381,14 +411,14 @@
         <li class="right" >
           <a href="../../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../../index.html" >Module code</a> &raquo;</li>
           <li><a href="../properties.html" >mdhandle.properties</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
         &copy; Copyright 2011, Dan Lussier, University of Oxford.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.2.
     </div>
   </body>
 </html>

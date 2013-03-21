@@ -2,13 +2,16 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
+
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>mdhandle.snap &mdash; mdhandle v0.9a documentation</title>
+    <title>mdhandle.snap &mdash; mdhandle 0.9a documentation</title>
+    
     <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../',
@@ -21,7 +24,7 @@
     <script type="text/javascript" src="../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../_static/doctools.js"></script>
-    <link rel="top" title="mdhandle v0.9a documentation" href="../../index.html" />
+    <link rel="top" title="mdhandle 0.9a documentation" href="../../index.html" />
     <link rel="up" title="Module code" href="../index.html" /> 
   </head>
   <body>
@@ -37,7 +40,7 @@
         <li class="right" >
           <a href="../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
       </ul>
     </div>  
@@ -217,7 +220,7 @@
 <span class="sd">            String representation of object (&lt; 80 chars).</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="n">string_rep</span> <span class="o">=</span> <span class="s">&#39;Snap </span><span class="si">%s</span><span class="s"> - </span><span class="si">%s</span><span class="s"> - </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn_base</span><span class="p">,</span>
+        <span class="n">string_rep</span> <span class="o">=</span> <span class="s">&#39;Snap </span><span class="si">%s</span><span class="s"> - </span><span class="si">%s</span><span class="s"> - id: </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="p">(</span><span class="bp">self</span><span class="o">.</span><span class="n">fn_base</span><span class="p">,</span>
                                             <span class="bp">self</span><span class="o">.</span><span class="n">active_dataset_name</span><span class="p">,</span> <span class="nb">id</span><span class="p">(</span><span class="bp">self</span><span class="p">))</span>
         <span class="k">return</span> <span class="n">string_rep</span>
 
@@ -285,7 +288,8 @@
                 <span class="bp">self</span><span class="o">.</span><span class="n">tensors</span> <span class="o">=</span> <span class="p">{}</span>
                 <span class="bp">self</span><span class="o">.</span><span class="n">symm_tensors</span> <span class="o">=</span> <span class="p">{}</span>
             <span class="k">else</span><span class="p">:</span>
-                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Requested dataset </span><span class="si">%s</span><span class="s"> does not exist&#39;</span> <span class="o">%</span> <span class="n">name</span><span class="p">)</span>
+                <span class="bp">self</span><span class="o">.</span><span class="n">logger</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;Requested dataset </span><span class="si">%s</span><span class="s"> does not exist in </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> 
+                                        <span class="p">(</span><span class="n">name</span><span class="p">,</span> <span class="bp">self</span><span class="o">.</span><span class="n">filename</span><span class="p">))</span>
 </div>
 <div class="viewcode-block" id="Snap.get_datasets"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.get_datasets">[docs]</a>    <span class="k">def</span> <span class="nf">get_datasets</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -417,7 +421,8 @@
 </div>
 <div class="viewcode-block" id="Snap.good_grid"><a class="viewcode-back" href="../../reference.html#mdhandle.snap.Snap.good_grid">[docs]</a>    <span class="k">def</span> <span class="nf">good_grid</span><span class="p">(</span><span class="bp">self</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
-<span class="sd">        If active dataset in HDF file returns ``True``.</span>
+<span class="sd">        If the active dataset in HDF file is a known type as stored</span>
+<span class="sd">        in :attr:`mdhandle.settings.IMPLEMENTED_GRIDS`, returns ``True``.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">if</span> <span class="bp">self</span><span class="o">.</span><span class="n">meta</span><span class="p">[</span><span class="s">&#39;grid_type&#39;</span><span class="p">]</span> <span class="ow">in</span> <span class="n">settings</span><span class="o">.</span><span class="n">IMPLEMENTED_GRIDS</span><span class="p">:</span>
@@ -574,7 +579,7 @@
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="../../search.html" method="get">
-      <input type="text" name="q" size="18" />
+      <input type="text" name="q" />
       <input type="submit" value="Go" />
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
@@ -600,13 +605,13 @@
         <li class="right" >
           <a href="../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../index.html" >Module code</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
         &copy; Copyright 2011, Dan Lussier, University of Oxford.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.2.
     </div>
   </body>
 </html>

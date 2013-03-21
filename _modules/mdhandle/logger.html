@@ -2,13 +2,16 @@
 <!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN"
   "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
 
+
 <html xmlns="http://www.w3.org/1999/xhtml">
   <head>
     <meta http-equiv="Content-Type" content="text/html; charset=utf-8" />
     
-    <title>mdhandle.logger &mdash; mdhandle v0.9a documentation</title>
+    <title>mdhandle.logger &mdash; mdhandle 0.9a documentation</title>
+    
     <link rel="stylesheet" href="../../_static/nature.css" type="text/css" />
     <link rel="stylesheet" href="../../_static/pygments.css" type="text/css" />
+    
     <script type="text/javascript">
       var DOCUMENTATION_OPTIONS = {
         URL_ROOT:    '../../',
@@ -21,7 +24,7 @@
     <script type="text/javascript" src="../../_static/jquery.js"></script>
     <script type="text/javascript" src="../../_static/underscore.js"></script>
     <script type="text/javascript" src="../../_static/doctools.js"></script>
-    <link rel="top" title="mdhandle v0.9a documentation" href="../../index.html" />
+    <link rel="top" title="mdhandle 0.9a documentation" href="../../index.html" />
     <link rel="up" title="Module code" href="../index.html" /> 
   </head>
   <body>
@@ -37,7 +40,7 @@
         <li class="right" >
           <a href="../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../index.html" accesskey="U">Module code</a> &raquo;</li> 
       </ul>
     </div>  
@@ -63,6 +66,7 @@
 <span class="c"># TODO: Prepend time and context to logged messages.</span>
 
 <span class="kn">import</span> <span class="nn">sys</span>
+<span class="kn">import</span> <span class="nn">os</span>
 
 
 <div class="viewcode-block" id="Logger"><a class="viewcode-back" href="../../reference.html#mdhandle.logger.Logger">[docs]</a><span class="k">class</span> <span class="nc">Logger</span><span class="p">(</span><span class="nb">object</span><span class="p">):</span>
@@ -116,20 +120,30 @@
 <span class="sd">        msg : string</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
-        <span class="c"># TODO: Method tos martly breakup text from msg into 80 char wide blobs</span>
+        <span class="c"># TODO: Method to smartly breakup text from msg into 80 char wide blobs</span>
         <span class="k">print</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\n</span><span class="s">&#39;</span> <span class="o">+</span> <span class="s">&#39;#&#39;</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">len_wrapper</span><span class="p">)</span>
         <span class="k">print</span><span class="p">(</span><span class="s">&#39;</span><span class="se">\t</span><span class="s"> </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">msg</span><span class="p">)</span>
         <span class="k">print</span><span class="p">(</span><span class="s">&#39;#&#39;</span><span class="o">*</span><span class="bp">self</span><span class="o">.</span><span class="n">len_wrapper</span><span class="p">)</span>
 </div>
-<div class="viewcode-block" id="Logger.completion_msg"><a class="viewcode-back" href="../../reference.html#mdhandle.logger.Logger.completion_msg">[docs]</a>    <span class="k">def</span> <span class="nf">completion_msg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
+<div class="viewcode-block" id="Logger.completion_msg"><a class="viewcode-back" href="../../reference.html#mdhandle.logger.Logger.completion_msg">[docs]</a>    <span class="k">def</span> <span class="nf">completion_msg</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">,</span> <span class="n">speak</span><span class="o">=</span><span class="bp">False</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Standard format for completion message.</span>
 
 <span class="sd">        Parameters</span>
 <span class="sd">        ----------</span>
 <span class="sd">        msg : string</span>
+<span class="sd">        speak : boolean</span>
+<span class="sd">            If ``True``, calls system to say message.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">speak</span> <span class="ow">is</span> <span class="bp">True</span> <span class="ow">and</span> <span class="n">sys</span><span class="o">.</span><span class="n">platform</span> <span class="o">==</span> <span class="s">&#39;darwin&#39;</span><span class="p">:</span>
+            <span class="c"># Platform dependent: OS X only</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s">&#39;say &quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="n">msg</span><span class="p">)</span>
+        <span class="k">else</span><span class="p">:</span>
+            <span class="c"># Other platforms</span>
+            <span class="k">print</span><span class="p">(</span><span class="s">&#39;Speak option is not available outside OS X&#39;</span><span class="p">)</span>
+            <span class="k">print</span><span class="p">(</span><span class="s">&#39;Completion message will be printed but not spoken.&#39;</span><span class="p">)</span>
+
         <span class="bp">self</span><span class="o">.</span><span class="n">procedure_banner</span><span class="p">(</span><span class="n">msg</span><span class="p">)</span>
 </div>
 <div class="viewcode-block" id="Logger.user_message"><a class="viewcode-back" href="../../reference.html#mdhandle.logger.Logger.user_message">[docs]</a>    <span class="k">def</span> <span class="nf">user_message</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
@@ -143,7 +157,7 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">print</span><span class="p">(</span><span class="s">&#39;+ </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">msg</span><span class="p">)</span>
 </div>
-<div class="viewcode-block" id="Logger.request"><a class="viewcode-back" href="../../reference.html#mdhandle.logger.Logger.request">[docs]</a>    <span class="k">def</span> <span class="nf">request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">input_type</span><span class="o">=</span><span class="s">&#39;raw&#39;</span><span class="p">):</span>
+<div class="viewcode-block" id="Logger.request"><a class="viewcode-back" href="../../reference.html#mdhandle.logger.Logger.request">[docs]</a>    <span class="k">def</span> <span class="nf">request</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="o">=</span><span class="s">&#39;&#39;</span><span class="p">,</span> <span class="n">input_type</span><span class="o">=</span><span class="s">&#39;raw&#39;</span><span class="p">,</span> <span class="n">speak</span><span class="o">=</span><span class="bp">True</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
 <span class="sd">        Used for printing user requests and questions.</span>
 <span class="sd">        </span>
@@ -156,15 +170,20 @@
 <span class="sd">            String providing context for request to user.</span>
 <span class="sd">        input_type : string, {&#39;raw&#39;, &#39;input&#39;}, [default=&#39;raw&#39;]</span>
 <span class="sd">           Selects the type of function used for catching user input.</span>
+<span class="sd">        speak : boolean</span>
+<span class="sd">            If ``True``, calls system to speak request.</span>
 
 <span class="sd">        &quot;&quot;&quot;</span>
+        <span class="k">if</span> <span class="n">speak</span> <span class="ow">is</span> <span class="bp">True</span><span class="p">:</span>
+            <span class="c"># TODO: Platform dependent: OS X only</span>
+            <span class="n">os</span><span class="o">.</span><span class="n">system</span><span class="p">(</span><span class="s">&#39;say &quot;</span><span class="si">%s</span><span class="s">&quot;&#39;</span> <span class="o">%</span> <span class="n">msg</span><span class="p">)</span>
+        
         <span class="k">if</span> <span class="n">input_type</span> <span class="o">==</span> <span class="s">&#39;raw&#39;</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">raw_input</span><span class="p">(</span><span class="s">&#39;&gt;&gt; </span><span class="si">%s</span><span class="s">: &#39;</span> <span class="o">%</span> <span class="n">msg</span><span class="p">)</span>
         <span class="k">elif</span> <span class="n">input_type</span> <span class="o">==</span> <span class="s">&#39;input&#39;</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">input</span><span class="p">(</span><span class="s">&#39;&gt;&gt; </span><span class="si">%s</span><span class="s">: &#39;</span> <span class="o">%</span> <span class="n">msg</span><span class="p">)</span>
         <span class="k">else</span><span class="p">:</span>
             <span class="bp">self</span><span class="o">.</span><span class="n">error</span><span class="p">(</span><span class="s">&#39;@ Input type </span><span class="si">%s</span><span class="s"> does not exist&#39;</span> <span class="o">%</span> <span class="n">input_type</span><span class="p">)</span>
-
 </div>
 <div class="viewcode-block" id="Logger.bad_input"><a class="viewcode-back" href="../../reference.html#mdhandle.logger.Logger.bad_input">[docs]</a>    <span class="k">def</span> <span class="nf">bad_input</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">msg</span><span class="p">):</span>
         <span class="sd">&quot;&quot;&quot;</span>
@@ -219,7 +238,6 @@
 <span class="sd">        &quot;&quot;&quot;</span>
         <span class="k">print</span><span class="p">(</span><span class="s">&#39;!! ERROR:&#39;</span><span class="p">)</span>
         <span class="k">print</span><span class="p">(</span><span class="s">&#39;    </span><span class="si">%s</span><span class="s">&#39;</span> <span class="o">%</span> <span class="n">msg</span><span class="p">)</span>
-        <span class="k">raise</span> <span class="ne">Exception</span>
 
 
 <span class="c">#=============================================================================</span>
@@ -239,7 +257,7 @@
 <div id="searchbox" style="display: none">
   <h3>Quick search</h3>
     <form class="search" action="../../search.html" method="get">
-      <input type="text" name="q" size="18" />
+      <input type="text" name="q" />
       <input type="submit" value="Go" />
       <input type="hidden" name="check_keywords" value="yes" />
       <input type="hidden" name="area" value="default" />
@@ -265,13 +283,13 @@
         <li class="right" >
           <a href="../../np-modindex.html" title="Python Module Index"
              >modules</a> |</li>
-        <li><a href="../../index.html">mdhandle v0.9a documentation</a> &raquo;</li>
+        <li><a href="../../index.html">mdhandle 0.9a documentation</a> &raquo;</li>
           <li><a href="../index.html" >Module code</a> &raquo;</li> 
       </ul>
     </div>
     <div class="footer">
         &copy; Copyright 2011, Dan Lussier, University of Oxford.
-      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.0.7.
+      Created using <a href="http://sphinx.pocoo.org/">Sphinx</a> 1.1.2.
     </div>
   </body>
 </html>
