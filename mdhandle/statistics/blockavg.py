@@ -6,6 +6,8 @@ Estimates error in time averages from MD simulation data.
 
 Block averaging procedure accounts for correlation between samples.
 
+Note: This module is currently a STUB.  Not for use.
+
 **References**
 
 See basic MD simulation text for reference:
