@@ -550,9 +550,6 @@ class MetalUnits(object):
 
     def LJ_surface_tension(self, gamma_metal):
         """
-        .. note:: 
-           **v0.9 - NOT IMPLEMENTED**
-
         Convert metal units surface tension to non-dim LJ units.
 
         Parameters
@@ -560,13 +557,15 @@ class MetalUnits(object):
         gamma_metal : float
             Metal units surface tension.
 
-        Raises
+        Returns
         -------
-            NotImplementedError
+        gamma_lj : float
+            Non-dim LJ surface tension.
 
         """
-        # TODO: Replace with logger call.
-        raise NotImplementedError('LJ_surface_tension method not implemented')
+        gamma_lj = gamma_metal * (self.sigma**2 / self.epsilon)
+
+
 
     def LJ_viscosity(self, mu_metal):
         """

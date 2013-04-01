@@ -58,7 +58,7 @@ def xmf_write_temporal_summary(sim_cont, fn_out='TEMP-SUMMARY-DEFAULT.xmf'):
     XML content within and including grid is copied into summary xmf file.
     
     .. note::
-       XMF temporal summary file must be in the same directoy as the 
+       XMF temporal summary file must be in the same directory as the 
        individual XMF files.
 
     Parameters
